@@ -11,6 +11,14 @@ module Parsec
         function
         | Parser func -> func word
     
+    let bind f p =
+        let innerProcess input = 
+            match run input p with
+            | Failure msg -> Failure (msg)
+            | Success(parsed,left) -> 
+                run left (f parsed)   
+        Parser innerProcess
+
     let expect c = 
         let innerProcess chars = 
             match chars with
@@ -46,10 +54,13 @@ module Parsec
             | Success (parsed,left) -> Success(f parsed,left)
             | Failure msg -> Failure(msg)
         Parser innerProcess
-    
+    let (<!>) = map
+
     let apply f param = 
         (f .>>. param) |> map (fun (f,x) ->f x) 
     let (<*>) = apply
+    
+    let (|>>) x f = map f x
     
     let give result = 
         let innerProcess str = 
@@ -59,6 +70,16 @@ module Parsec
     let rec lift2 f param1 param2=
         give f <*> param1 <*> param2
     
+    let add = lift2 (+)
+
+    let startWith =
+        let innerProcess (str:string) (prefix:string) = str.StartsWith(prefix)
+        lift2 innerProcess
+    
+    let endWith =
+        let innerProcess (str:string) (suffix:string) = str.EndsWith(suffix)
+        lift2 innerProcess
+
     let rec sequence parsers = 
         let cons a b = a :: b
         let (++)  = lift2 (cons)
@@ -70,3 +91,51 @@ module Parsec
         List.map (expect) 
         >> sequence
 
+    let tryWith parser word = 
+        match run word parser with
+        | Failure (msg) -> Success((),word)
+        | Success (parsed,left) -> Success (parsed,left)
+
+    let keepParsing offset parser =
+        let innerProcess input = 
+            let initialParser =
+                let seq = 
+                    Seq.initInfinite (fun _ -> parser ) 
+                    |> Seq.take offset
+                    |> Seq.toList
+                seq |> sequence
+            let rec loop input parser =
+                match run input parser with
+                | Failure err ->
+                    ([],input)
+                | Success (firstValue,inputAfterFirstParse) ->
+                    let (subsequentValues,remainingInput) = loop inputAfterFirstParse parser
+                    let values = firstValue::subsequentValues
+                    (values,remainingInput)
+            match run input initialParser with 
+            | Failure msg when offset <> 0 -> Failure msg
+            | _ -> Success (loop input parser)
+        Parser innerProcess
+    
+    let many parser = keepParsing 0 parser
+    let many1 parser = keepParsing 1 parser
+
+    let option parser = 
+        let some = parser |>> Some
+        let none = give None
+        some <|> none
+
+    let (.>>) lhs rhs = 
+        lhs .>>. rhs
+        |> map (fun (a,_) -> a)
+        
+    let (>>.) lhs rhs = 
+        lhs .>>. rhs
+        |> map (fun (_,b) -> b)
+
+    let between left parser right = 
+        left >>. parser .>> right
+    
+    let separateBy parser separator =
+        parser .>>. many (parser .>> separator)
+        |>> (fun (head,tail) -> head::tail) 
