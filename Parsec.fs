@@ -139,3 +139,8 @@ module Parsec
     let separateBy parser separator =
         parser .>>. many (parser .>> separator)
         |>> (fun (head,tail) -> head::tail) 
+
+    type ParserBuilder() =
+        member _.Bind(comp, func) = bind func comp
+        member _.Return(value) = give value
+    let Parser = ParserBuilder()
