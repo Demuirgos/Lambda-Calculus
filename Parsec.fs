@@ -11,6 +11,8 @@ module Parsec
         function
         | Parser func -> func word
     
+    let empty = Success((),"")
+
     let bind f p =
         let innerProcess input = 
             match run input p with
@@ -18,14 +20,22 @@ module Parsec
             | Success(parsed,left) -> 
                 run left (f parsed)   
         Parser innerProcess
+    let (>>=) = bind
 
-    let expect c = 
-        let innerProcess chars = 
-            match chars with
-            | head :: tail when c = head -> Success(head,tail)
-            | _ -> Failure(sprintf "Expected %c" c)
+    let give result = 
+        let innerProcess str = 
+            Success(result,str)
         Parser innerProcess
     
+    let satisfy pred = 
+        let innerProcess input = 
+            match input with
+            | head :: tail when pred head -> Success(head, tail)
+            | _  -> Failure(sprintf "Unexpected %c" input.Head) 
+        Parser innerProcess
+
+    let expect c = satisfy (fun prefix -> prefix = c)
+        
     let orElse parser1 parser2  = 
         let innerProcess str= 
             match run str parser1 with
@@ -61,11 +71,6 @@ module Parsec
     let (<*>) = apply
     
     let (|>>) x f = map f x
-    
-    let give result = 
-        let innerProcess str = 
-            Success(result,str)
-        Parser innerProcess
     
     let rec lift2 f param1 param2=
         give f <*> param1 <*> param2
@@ -140,7 +145,11 @@ module Parsec
         parser .>>. many (parser .>> separator)
         |>> (fun (head,tail) -> head::tail) 
 
-    type ParserBuilder() =
-        member _.Bind(comp, func) = bind func comp
+    type ParserMonad() =
+        member _.Bind(comp, func) = comp >>= func
         member _.Return(value) = give value
-    let Parser = ParserBuilder()
+        member _.ReturnFrom(p) = p
+        member _.TryWith(p, f) = fun state -> try p state
+                                              with e -> (f e) state
+        member _.Zero () = empty
+    let Parser = ParserMonad()

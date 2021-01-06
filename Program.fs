@@ -4,12 +4,18 @@ open Interpreter
 
 [<EntryPoint>]
 let main (args:string []) =
-    let word = "Lake" 
-    Parser {
-        let w = Seq.toList word
-        let p1 = expect 'L'
-        let p2 = expect 'a'
-        return run w (p1 <|> p2)
+    let word = "the lake is dry" 
+    let verbParser = Parser {
+        let subject = Parser {
+            let p w = allOf (Seq.toList w) 
+            return! (p "the") .>>. expect ' ' .>>. (p "lake") .>>. expect ' '
+        }
+        let verb = Parser {
+            let p = expect 'i' .>>. expect 's'
+            return! p
+        } 
+        let object = (expect ' ') .>>. (allOf <| Seq.toList "dry" )
+        return! between subject verb object
     }
-    |> printf "%A"
+    ((Seq.toList word),verbParser) ||> run  |> printf "%A"
     0
