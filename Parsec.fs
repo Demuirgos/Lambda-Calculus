@@ -31,7 +31,7 @@ module Parsec
         let innerProcess input = 
             match input with
             | head :: tail when pred head -> Success(head, tail)
-            | _  -> Failure(sprintf "Unexpected %c" input.Head) 
+            | _  -> Failure(sprintf "Unexpected character") 
         Parser innerProcess
 
     let expect c = satisfy (fun prefix -> prefix = c)
@@ -97,9 +97,7 @@ module Parsec
         >> sequence
 
     let tryWith parser word = 
-        match run word parser with
-        | Failure (msg) -> Success((),word)
-        | Success (parsed,left) -> Success (parsed,left)
+       failwith "Not yet made"
 
     let keepParsing offset parser =
         let innerProcess input = 
@@ -122,8 +120,8 @@ module Parsec
             | _ -> Success (loop input parser)
         Parser innerProcess
     
-    let many parser = keepParsing 0 parser
-    let many1 parser = keepParsing 1 parser
+    let many n parser = 
+        keepParsing n parser
 
     let option parser = 
         let some = parser |>> Some
@@ -142,14 +140,17 @@ module Parsec
         left >>. parser .>> right
     
     let separateBy parser separator =
-        parser .>>. many (parser .>> separator)
+        parser .>>. many 0 (parser .>> separator)
         |>> (fun (head,tail) -> head::tail) 
 
     type ParserMonad() =
-        member _.Bind(comp, func) = comp >>= func
-        member _.Return(value) = give value
-        member _.ReturnFrom(p) = p
-        member _.TryWith(p, f) = fun state -> try p state
-                                              with e -> (f e) state
-        member _.Zero () = empty
+        member inline __.Delay(f)   = fun state -> (f ()) state
+            member inline __.Return(x)  = give x
+            member inline __.Bind(p, f) = p >>= f
+            member inline __.Zero()     = empty
+            member inline __.ReturnFrom(p) = p
+            member inline __.TryWith(p, cf) =
+              fun state -> try p state with e -> (cf e) state
+            member inline __.TryFinally(p, ff) =
+              fun state -> try p state finally ff ()
     let Parser = ParserMonad()
