@@ -4,19 +4,16 @@ open Interpreter
 
 [<EntryPoint>]
 let main (args:string []) =
-    let word = "-35.3" 
-    //let verbParser = Parser {
-    //let subject = Parser {
-    //        let proc = fun w -> w |> (Seq.toList >> allOf)
-    //        return! (proc "the") .>>. expect ' ' .>>. (proc "lake") .>>. expect ' '
-    //    }
-    //    let verb = Parser {
-    //        let p = expect 'i' .>>. expect 's'
-    //        return p
-    //    } 
-    //    let object = (expect ' ') .>>. (allOf <| Seq.toList "dry" )
-    //    return between subject verb object
-    //}
+    let word = "-35,3" 
+    // let verbParser = Parser {
+    //     let subject = Parser {
+    //         let proc = fun w -> w |> (Seq.toList >> allOf)
+    //         return (proc "the") .>>. expect ' ' .>>. (proc "lake") .>>. expect ' '
+    //     }
+    //     let verb = expect 'i' .>>. expect 's'
+    //     let object = (expect ' ') .>>. (allOf <| Seq.toList "dry" )
+    //     return between subject verb object
+    // }
     //((Seq.toList word),verbParser) ||> run  |> printf "%A"
     let pint = 
         let intp = "0123456789" |> Seq.toList |> anyOf |> many 1 
@@ -29,7 +26,8 @@ let main (args:string []) =
             match sign with 
             | Some _ -> - absValue
             | _ -> absValue
-        signp .>>. intp .>>. sepp .>>. intp 
+        (signp .>>. intp .>>. sepp .>>. intp) <?> "Number"
         |> map mapping
-    (Seq.toList word,pint) ||> run  |> printf "%A"
+    (word |> fromStr,pint) ||> run  |> toResult |> printf "%A"
+    ("ab" |> fromStr) />? (expect 'a') |> printf "%A"
     0

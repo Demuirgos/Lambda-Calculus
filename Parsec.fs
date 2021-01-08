@@ -2,49 +2,133 @@
 module Parsec
     open FSharp.Core
     
-    type Result<'a,'b> =
+    let toString = (List.map string) >> List.reduce (+) 
+    type Error = string
+    [<AutoOpen>]
+    module Position =
+        type Position = Cursor of (int*int)
+        let ``initial Position`` =  Cursor (0,0)
+        let incrCol = 
+            function
+            | Cursor(line,column) -> Cursor(line,column + 1)
+        let incrLin = 
+            function
+            | Cursor(line,column) -> Cursor(line + 1,0)
+    [<AutoOpen>]
+    module State =
+        type State = Input of (char list[] * Position)
+        let fromStr str = 
+            if String.length str = 0 then
+                Input ([||],``initial Position``)
+            else
+                let separators = [| '\r'; '\n' |]
+                let lines = separators |> str.Split  |> Array.map Seq.toList
+                Input (lines,``initial Position``)
+        let currentLine = 
+            function
+            | Input (lines,Cursor (line,column)) ->
+                if line < Array.length lines then
+                    Some lines.[line]
+                else
+                    None   
+        let next input = 
+            match input with
+            | Input (lines,pos) -> 
+                let current = currentLine input
+                match (current,pos) with
+                | (None,_) -> input, None
+                | (Some l,Cursor(_,column)) -> 
+                    match column < List.length l with 
+                    | true  -> (Input(lines,incrCol pos),Some l.[column])
+                    | false -> (Input(lines,incrLin pos),Some '\n')
+        let rec readAllChars input =
+            [
+                let remainingInput,charOpt = next input 
+                match charOpt with
+                | None -> 
+                    ()
+                | Some ch -> 
+                    yield ch
+                    yield! readAllChars remainingInput
+            ]
+    [<AutoOpen>]
+    module ParserPosition = 
+        type ParserPosition = {
+            Marker : Position
+            Line : char list Option
+        }
+        let fromState state= 
+            match state with 
+            | Input (lines,position) ->
+                {Marker = position; Line = currentLine state} 
+    type Result<'a> =
         | Success of 'a 
-        | Failure of 'b
-    type Parser<'a> = Parser of ((char list) -> Result<'a * char list,string>)
+        | Failure of label:string * message:Error * location:ParserPosition
+    let toResult result =
+        match result with
+        | Success (value,_) -> 
+            sprintf "%A" value
+        | Failure (label,error,cursor) -> 
+            let line, colPos,linePos = 
+                match cursor.Line,cursor.Marker with
+                | (Some l,Cursor (lin,col)) -> toString l,col,lin
+                | (None  ,Cursor (lin,col)) -> "EOF"     ,col,lin
+            let caret = sprintf "%*s^ %s" colPos "" error
+            sprintf "Line:%i Col:%i Error parsing %s\n%s\n%s" linePos colPos label line caret 
+    type Parser<'a> = {
+        Function: (State -> Result<'a * State>)
+        Label : string
+    }
+    let run word p = word |> p.Function 
     
-    let run word = 
-        function
-        | Parser func -> func word
-    
+    let give result = 
+        let innerProcess str = 
+            Success(result,str)
+        {Function=innerProcess; Label= sprintf "%A" result}
+
+    let setLabel parser newLabel = 
+        let innerProcess input = 
+            match parser.Function input with
+            | Success s ->
+                Success s 
+            | Failure (_,err,pos) -> 
+                Failure (newLabel,err,pos)  
+        {Function=innerProcess; Label=newLabel}
+    let (<?>) = setLabel
+
+    let (<%>) = toResult
+
     let empty = Success((),"")
 
     let bind f p =
         let innerProcess input = 
             match run input p with
-            | Failure msg -> Failure (msg)
+            | Failure (label, msg,pos) -> Failure (label, msg,pos)
             | Success(parsed,left) -> 
                 run left (f parsed)   
-        Parser innerProcess
-    let (>>=) = bind
-
-    let give result = 
-        let innerProcess str = 
-            Success(result,str)
-        Parser innerProcess
+        {Function = innerProcess; Label="unknown"}
+    let (>>=)f p = bind p f
     
-    let satisfy pred = 
-        let innerProcess input = 
-            match input with
-            | head :: tail when pred head -> Success(head, tail)
-            | _  -> Failure(sprintf "Unexpected character") 
-        Parser innerProcess
+    let satisfy pred label= 
+        let innerProcess input =
+            let tail,head = next input 
+            match head with
+            | Some char when pred char -> Success (char, tail)
+            | Some char -> Failure (label,  sprintf "Unexpected '%c'" char, fromState input)
+            | _  -> Failure (label,  sprintf "Unexpected character", fromState input) 
+        {Function=innerProcess; Label=sprintf "satisfy %A" pred}
 
-    let expect c = satisfy (fun prefix -> prefix = c)
+    let expect c = satisfy (fun prefix -> prefix = c) (sprintf "%c" c)
         
     let orElse parser1 parser2  = 
         let innerProcess str= 
             match run str parser1 with
             | Success(parsed,left) -> Success(parsed,left)
             | _ -> run str parser2 
-        Parser innerProcess
+        {Function=innerProcess; Label=sprintf "%s orElsa %s" (parser1.Label) (parser2.Label)}
     let (<|>) = orElse
     
-    let anyOf = 
+    let anyOf  = 
         List.map (expect) 
         >> List.reduce (orElse)
     
@@ -53,21 +137,23 @@ module Parsec
             match run str parser1 with
             | Success(parsed1,left1) -> match run left1 parser2 with 
                                         | Success(parsed2,left2) -> Success((parsed1,parsed2),left2)
-                                        | Failure(msg) -> Failure(msg)
-            | Failure(msg) -> Failure(msg)
-        Parser innerProcess
+                                        | Failure (label, msg, pos) -> Failure (label, msg, pos)
+            | Failure (label, msg, pos) -> Failure (label, msg, pos)
+        {Function=innerProcess; Label=sprintf "%s andThen %s" (parser1.Label) (parser2.Label)}
     let (.>>.) = andThen
     
     let map f parser =
         let innerProcess str = 
             match run str parser with
-            | Success (parsed,left) -> Success(f parsed,left)
-            | Failure msg -> Failure(msg)
-        Parser innerProcess
+            | Success (parsed,left) -> Success (f parsed,left)
+            | Failure (label , msg, pos) -> Failure (label , msg, pos)
+        { Function=innerProcess; Label=parser.Label}
     let (<!>) = map
 
-    let apply f param = 
-        (f .>>. param) |> map (fun (f,x) ->f x) 
+    let apply fP xP =         
+        fP >>= (fun f -> 
+        xP >>= (fun x -> 
+            give (f x) ))
     let (<*>) = apply
     
     let (|>>) x f = map f x
@@ -94,10 +180,13 @@ module Parsec
          
     let allOf = 
         List.map (expect) 
-        >> sequence
+        >> sequence 
 
     let tryWith parser word = 
-       failwith "Not yet made"
+        match run word parser with
+        | Success (parsed,left)   -> Success (parsed,left)
+        | Failure (lbl, msg, pos) -> Failure (lbl, msg, pos)
+    let (/>?) word parser = tryWith parser word
 
     let keepParsing offset parser =
         let innerProcess input = 
@@ -109,24 +198,22 @@ module Parsec
                 seq |> sequence
             let rec loop input parser =
                 match run input parser with
-                | Failure err ->
+                | Failure (label, msg, pos) ->
                     ([],input)
                 | Success (firstValue,inputAfterFirstParse) ->
                     let (subsequentValues,remainingInput) = loop inputAfterFirstParse parser
                     let values = firstValue::subsequentValues
                     (values,remainingInput)
             match run input initialParser with 
-            | Failure msg when offset <> 0 -> Failure msg
+            | Failure (label, msg, pos) when offset <> 0 -> Failure (label, msg, pos)
             | _ -> Success (loop input parser)
-        Parser innerProcess
-    
-    let many n parser = 
-        keepParsing n parser
+        {Function = innerProcess; Label = sprintf "%s{%d,}" parser.Label offset}
+    let many n parser = keepParsing n parser
 
     let option parser = 
         let some = parser |>> Some
         let none = give None
-        some <|> none
+        (some <|> none) <?> (sprintf "opt %s" (parser.Label))
 
     let (.>>) lhs rhs = 
         lhs .>>. rhs
@@ -139,10 +226,10 @@ module Parsec
     let between left parser right = 
         left >>. parser .>> right
     
-    let separateBy parser separator =
-        parser .>>. many 0 (parser .>> separator)
-        |>> (fun (head,tail) -> head::tail) 
-
+    let separate1By parser separator =
+        parser .>>. many 0 (separator >>. parser )
+        |>> (fun (h,l) -> h::l) 
+            
     type ParserMonad() =
         member inline __.Delay(f)   = fun state -> (f ()) state
             member inline __.Return(x)  = give x
