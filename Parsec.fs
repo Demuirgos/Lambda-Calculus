@@ -14,7 +14,7 @@ module Parsec
             | Cursor(line,column) -> Cursor(line,column + 1)
         let incrLin = 
             function
-            | Cursor(line,column) -> Cursor(line + 1,0)
+            | Cursor(line,_) -> Cursor(line + 1,0)
     [<AutoOpen>]
     module State =
         type State = Input of (char list[] * Position)
@@ -27,7 +27,7 @@ module Parsec
                 Input (lines,``initial Position``)
         let currentLine = 
             function
-            | Input (lines,Cursor (line,column)) ->
+            | Input (lines,Cursor (line,_)) ->
                 if line < Array.length lines then
                     Some lines.[line]
                 else
@@ -62,7 +62,7 @@ module Parsec
             }
             let fromState state= 
                 match state with 
-                | Input (lines,position) ->
+                | Input (_,position) ->
                     {Marker = position; Line = currentLine state} 
 
         type Result<'a> =
@@ -97,12 +97,14 @@ module Parsec
                     run left (f parsed)   
             {Function = innerProcess; Label="unknown"}
         let (>>=) f p = bind p f
-    
+        
         let give result = 
             let innerProcess str = 
                 Success(result,str)
             {Function=innerProcess; Label= sprintf "%A" result}
+        
         let empty state = Failure ("Empty", "pzero", fromState state) 
+        
         type ParserMonad() =
             member inline _.Return(x)  = give x
             member inline _.ReturnFrom(P)  = P
@@ -230,19 +232,7 @@ module Parsec
             (some <|> none) <?> (sprintf "opt %s" (parser.Label))
         
         let choice parsers = 
-            let rec innerProcess errors input = 
-                match parsers with 
-                | [] -> Failure ("choice","No parsers given", fromState input)
-                | [p] ->
-                    match run input p with 
-                    | Failure (_) as e -> e
-                    | Success (_) as s -> s
-                | p :: ps -> 
-                    match run input p with 
-                    | Failure (_, msg, _) -> 
-                        innerProcess (msg::errors) input 
-                    | Success (_) as s -> s
-            {Function = innerProcess [] ; Label = "choice Parser"}
+            List.reduce (<|>) parsers
 
         let (.>>) lhs rhs = 
             lhs .>>. rhs
@@ -258,3 +248,12 @@ module Parsec
         let separate1By parser separator =
             parser .>>. many 0 (separator >>. parser )
             |>> (fun (h,l) -> h::l) 
+        
+        let eof = 
+            let innerProcess input= 
+                match next input with
+                | (_,Some c) when c <> '\n' -> 
+                    Failure ("EOF","Expected EOF Token", fromState input)
+                | _ -> 
+                    Success(fromStr "",input)
+            {Function = innerProcess; Label = "EOF"}
