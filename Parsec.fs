@@ -3,6 +3,7 @@ module Parsec
     open FSharp.Core
     
     let toString = (List.map string) >> List.reduce (+) 
+    
     type Error = string
     [<AutoOpen>]
     module Position =
@@ -52,192 +53,208 @@ module Parsec
                     yield! readAllChars remainingInput
             ]
     [<AutoOpen>]
-    module ParserPosition = 
-        type ParserPosition = {
-            Marker : Position
-            Line : char list Option
+    module Parser =
+        [<AutoOpen>]
+        module ParserPosition = 
+            type ParserPosition = {
+                Marker : Position
+                Line : char list Option
+            }
+            let fromState state= 
+                match state with 
+                | Input (lines,position) ->
+                    {Marker = position; Line = currentLine state} 
+
+        type Result<'a> =
+            | Success of 'a 
+            | Failure of label:string * message:Error * location:ParserPosition
+        type Parser<'a> = {
+            Function: (State -> Result<'a * State>)
+            Label : string
         }
-        let fromState state= 
-            match state with 
-            | Input (lines,position) ->
-                {Marker = position; Line = currentLine state} 
-    type Result<'a> =
-        | Success of 'a 
-        | Failure of label:string * message:Error * location:ParserPosition
-    let toResult result =
-        match result with
-        | Success (value,_) -> 
-            sprintf "%A" value
-        | Failure (label,error,cursor) -> 
-            let line, colPos,linePos = 
-                match cursor.Line,cursor.Marker with
-                | (Some l,Cursor (lin,col)) -> toString l,col,lin
-                | (None  ,Cursor (lin,col)) -> "EOF"     ,col,lin
-            let caret = sprintf "%*s^ %s" colPos "" error
-            sprintf "Line:%i Col:%i Error parsing %s\n%s\n%s" linePos colPos label line caret 
-    type Parser<'a> = {
-        Function: (State -> Result<'a * State>)
-        Label : string
-    }
-    let run word p = word |> p.Function 
     
-    let give result = 
-        let innerProcess str = 
-            Success(result,str)
-        {Function=innerProcess; Label= sprintf "%A" result}
-
-    let setLabel parser newLabel = 
-        let innerProcess input = 
-            match parser.Function input with
-            | Success s ->
-                Success s 
-            | Failure (_,err,pos) -> 
-                Failure (newLabel,err,pos)  
-        {Function=innerProcess; Label=newLabel}
-    let (<?>) = setLabel
-
-    let (<%>) = toResult
-
-    let empty = Success((),"")
-
-    let bind f p =
-        let innerProcess input = 
-            match run input p with
-            | Failure (label, msg,pos) -> Failure (label, msg,pos)
-            | Success(parsed,left) -> 
-                run left (f parsed)   
-        {Function = innerProcess; Label="unknown"}
-    let (>>=)f p = bind p f
+        let toResult result =
+            match result with
+            | Success (value,_) -> 
+                sprintf "%A" value
+            | Failure (label,error,cursor) -> 
+                let line, colPos,linePos = 
+                    match cursor.Line,cursor.Marker with
+                    | (Some l,Cursor (lin,col)) -> toString l,col,lin
+                    | (None  ,Cursor (lin,col)) -> "EOF"     ,col,lin
+                let caret = sprintf "%*s^ %s" colPos "" error
+                sprintf "Line:%i Col:%i Error parsing %s\n%s\n%s" linePos colPos label line caret 
     
-    let satisfy pred label= 
-        let innerProcess input =
-            let tail,head = next input 
-            match head with
-            | Some char when pred char -> Success (char, tail)
-            | Some char -> Failure (label,  sprintf "Unexpected '%c'" char, fromState input)
-            | _  -> Failure (label,  sprintf "Unexpected character", fromState input) 
-        {Function=innerProcess; Label=sprintf "satisfy %A" pred}
-
-    let expect c = satisfy (fun prefix -> prefix = c) (sprintf "%c" c)
-        
-    let orElse parser1 parser2  = 
-        let innerProcess str= 
-            match run str parser1 with
-            | Success(parsed,left) -> Success(parsed,left)
-            | _ -> run str parser2 
-        {Function=innerProcess; Label=sprintf "%s orElsa %s" (parser1.Label) (parser2.Label)}
-    let (<|>) = orElse
+        let ref p = lazy (p)  
     
-    let anyOf  = 
-        List.map (expect) 
-        >> List.reduce (orElse)
+        let run word p = word |> p.Function 
     
-    let andThen parser1 parser2 =
-        let innerProcess str= 
-            match run str parser1 with
-            | Success(parsed1,left1) -> match run left1 parser2 with 
-                                        | Success(parsed2,left2) -> Success((parsed1,parsed2),left2)
-                                        | Failure (label, msg, pos) -> Failure (label, msg, pos)
-            | Failure (label, msg, pos) -> Failure (label, msg, pos)
-        {Function=innerProcess; Label=sprintf "%s andThen %s" (parser1.Label) (parser2.Label)}
-    let (.>>.) = andThen
+        let bind f p =
+            let innerProcess input = 
+                match run input p with
+                | Failure (label, msg, pos) -> Failure (label, msg, pos)
+                | Success(parsed, left) -> 
+                    run left (f parsed)   
+            {Function = innerProcess; Label="unknown"}
+        let (>>=) f p = bind p f
     
-    let map f parser =
-        let innerProcess str = 
-            match run str parser with
-            | Success (parsed,left) -> Success (f parsed,left)
-            | Failure (label , msg, pos) -> Failure (label , msg, pos)
-        { Function=innerProcess; Label=parser.Label}
-    let (<!>) = map
-
-    let apply fP xP =         
-        fP >>= (fun f -> 
-        xP >>= (fun x -> 
-            give (f x) ))
-    let (<*>) = apply
+        let give result = 
+            let innerProcess str = 
+                Success(result,str)
+            {Function=innerProcess; Label= sprintf "%A" result}
+        let empty state = Failure ("Empty", "pzero", fromState state) 
+        type ParserMonad() =
+            member inline _.Return(x)  = give x
+            member inline _.ReturnFrom(P)  = P
+            member inline _.Bind(p, f) = p >>= f
+            member inline _.Delay(f) = 
+                let promise = Lazy.Create f
+                () |> give |> bind (fun ()->promise.Value)
+            member inline __.Zero() = empty
+        let Parser = ParserMonad()
     
-    let (|>>) x f = map f x
+        let apply fP xP = 
+            Parser {
+                let! f = fP
+                let! x = xP
+                return f x
+            }
+        let (<*>) = apply
     
-    let rec lift2 f param1 param2=
-        give f <*> param1 <*> param2
-    
-    let add = lift2 (+)
-
-    let startWith =
-        let innerProcess (str:string) (prefix:string) = str.StartsWith(prefix)
-        lift2 innerProcess
-    
-    let endWith =
-        let innerProcess (str:string) (suffix:string) = str.EndsWith(suffix)
-        lift2 innerProcess
-
-    let rec sequence parsers = 
-        let cons a b = a :: b
-        let (++)  = lift2 (cons)
-        match parsers with
-        | [] -> give []
-        | parser::rest -> parser ++ (sequence rest)
-         
-    let allOf = 
-        List.map (expect) 
-        >> sequence 
-
-    let tryWith parser word = 
-        match run word parser with
-        | Success (parsed,left)   -> Success (parsed,left)
-        | Failure (lbl, msg, pos) -> Failure (lbl, msg, pos)
-    let (/>?) word parser = tryWith parser word
-
-    let keepParsing offset parser =
-        let innerProcess input = 
-            let initialParser =
-                let seq = 
-                    Seq.initInfinite (fun _ -> parser ) 
-                    |> Seq.take offset
-                    |> Seq.toList
-                seq |> sequence
-            let rec loop input parser =
-                match run input parser with
-                | Failure (label, msg, pos) ->
-                    ([],input)
-                | Success (firstValue,inputAfterFirstParse) ->
-                    let (subsequentValues,remainingInput) = loop inputAfterFirstParse parser
-                    let values = firstValue::subsequentValues
-                    (values,remainingInput)
-            match run input initialParser with 
-            | Failure (label, msg, pos) when offset <> 0 -> Failure (label, msg, pos)
-            | _ -> Success (loop input parser)
-        {Function = innerProcess; Label = sprintf "%s{%d,}" parser.Label offset}
-    let many n parser = keepParsing n parser
-
-    let option parser = 
-        let some = parser |>> Some
-        let none = give None
-        (some <|> none) <?> (sprintf "opt %s" (parser.Label))
-
-    let (.>>) lhs rhs = 
-        lhs .>>. rhs
-        |> map (fun (a,_) -> a)
-        
-    let (>>.) lhs rhs = 
-        lhs .>>. rhs
-        |> map (fun (_,b) -> b)
-
-    let between left parser right = 
-        left >>. parser .>> right
-    
-    let separate1By parser separator =
-        parser .>>. many 0 (separator >>. parser )
-        |>> (fun (h,l) -> h::l) 
+        let setLabel parser newLabel = 
+            let innerProcess input = 
+                match parser.Function input with
+                | Success s ->
+                    Success s 
+                | Failure (_,err,pos) -> 
+                    Failure (newLabel,err,pos)  
+            {Function=innerProcess; Label=newLabel}
+        let (<?>) = setLabel
             
-    type ParserMonad() =
-        member inline __.Delay(f)   = fun state -> (f ()) state
-            member inline __.Return(x)  = give x
-            member inline __.Bind(p, f) = p >>= f
-            member inline __.Zero()     = empty
-            member inline __.ReturnFrom(p) = p
-            member inline __.TryWith(p, cf) =
-              fun state -> try p state with e -> (cf e) state
-            member inline __.TryFinally(p, ff) =
-              fun state -> try p state finally ff ()
-    let Parser = ParserMonad()
+        let (<%>) = toResult
+            
+        let satisfy pred label= 
+            let innerProcess input =
+                let tail,head = next input 
+                match head with
+                | Some char when pred char -> Success (char, tail)
+                | Some char -> Failure (label,  sprintf "Unexpected '%c'" char, fromState input)
+                | _  -> Failure (label,  sprintf "Unexpected character", fromState input) 
+            {Function=innerProcess; Label=sprintf "satisfy %A" pred}
+    [<AutoOpen>]
+    module Primitives =             
+        let expect c = satisfy (fun prefix -> prefix = c) (sprintf "%c" c)
+
+        let orElse parser1 parser2  = 
+            let innerProcess str= 
+                match run str parser1 with
+                | Success(parsed,left) -> Success(parsed,left)
+                | _ -> run str parser2 
+            {Function=innerProcess; Label=sprintf "%s orElsa %s" (parser1.Label) (parser2.Label)}
+        let (<|>) = orElse
+            
+        let anyOf  = 
+            List.map (expect) 
+            >> List.reduce (orElse)
+        
+        let andThen parser1 parser2 =
+            Parser {
+                let! a = parser1
+                let! b = parser2
+                return (a,b)
+            } <?> sprintf "%s andThen %s" (parser1.Label) (parser2.Label)
+        let (.>>.) = andThen
+        
+        let map f parser =
+            Parser {
+                let! c = parser
+                return f c
+            }
+        let (|>>) x f = map f x
+        
+        let rec lift2 f param1 param2=
+            give f <*> param1 <*> param2
+        
+        let add = lift2 (+)
+
+        let startWith =
+            let innerProcess (str:string) (prefix:string) = str.StartsWith(prefix)
+            lift2 innerProcess
+        
+        let endWith =
+            let innerProcess (str:string) (suffix:string) = str.EndsWith(suffix)
+            lift2 innerProcess
+
+        let rec sequence parsers = 
+            let cons a b = a :: b
+            let (++)  = lift2 (cons)
+            match parsers with
+            | [] -> give []
+            | parser::rest -> parser ++ (sequence rest)
+
+        let allOf = 
+            List.map (expect) 
+            >> sequence 
+
+        let tryWith parser word = 
+            match run word parser with
+            | Success (parsed,left)   -> Success (parsed,left)
+            | Failure (lbl, msg, pos) -> Failure (lbl, msg, pos)
+        let (/>?) word parser = tryWith parser word
+
+        let keepParsing offset parser =
+            let innerProcess input = 
+                let initialParser =
+                    let seq = 
+                        Seq.initInfinite (fun _ -> parser ) 
+                        |> Seq.take offset
+                        |> Seq.toList
+                    seq |> sequence
+                let rec loop input parser =
+                    match run input parser with
+                    | Failure (label, msg, pos) ->
+                        ([],input)
+                    | Success (firstValue,inputAfterFirstParse) ->
+                        let (subsequentValues,remainingInput) = loop inputAfterFirstParse parser
+                        let values = firstValue::subsequentValues
+                        (values,remainingInput)
+                match run input initialParser with 
+                | Failure (label, msg, pos) when offset <> 0 -> Failure (label, msg, pos)
+                | _ -> Success (loop input parser)
+            {Function = innerProcess; Label = sprintf "%s{%d,}" parser.Label offset}
+        let many n parser = keepParsing n parser
+                
+        let option parser = 
+            let some = parser |>> Some
+            let none = give None
+            (some <|> none) <?> (sprintf "opt %s" (parser.Label))
+        
+        let choice parsers = 
+            let rec innerProcess errors input = 
+                match parsers with 
+                | [] -> Failure ("choice","No parsers given", fromState input)
+                | [p] ->
+                    match run input p with 
+                    | Failure (_) as e -> e
+                    | Success (_) as s -> s
+                | p :: ps -> 
+                    match run input p with 
+                    | Failure (_, msg, _) -> 
+                        innerProcess (msg::errors) input 
+                    | Success (_) as s -> s
+            {Function = innerProcess [] ; Label = "choice Parser"}
+
+        let (.>>) lhs rhs = 
+            lhs .>>. rhs
+            |> map (fun (a,_) -> a)
+
+        let (>>.) lhs rhs = 
+            lhs .>>. rhs
+            |> map (fun (_,b) -> b)
+
+        let between left parser right = 
+            left >>. parser .>> right
+
+        let separate1By parser separator =
+            parser .>>. many 0 (separator >>. parser )
+            |>> (fun (h,l) -> h::l) 
