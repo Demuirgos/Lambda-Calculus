@@ -84,10 +84,12 @@ module Parsec
                     | (None  ,Cursor (lin,col)) -> "EOF"     ,col,lin
                 let caret = sprintf "%*s^ %s" colPos "" error
                 sprintf "Line:%i Col:%i Error parsing %s\n%s\n%s" linePos colPos label line caret 
+        
         let getContent = 
             function
             | Success (v,_) -> Some v
             | _ -> None
+
         let ref p = lazy (p)  
     
         let run word p = word |> p.Function 
