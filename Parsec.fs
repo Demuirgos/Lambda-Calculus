@@ -42,16 +42,6 @@ module Parsec
                     match column < List.length l with 
                     | true  -> (Input(lines,incrCol pos),Some l.[column])
                     | false -> (Input(lines,incrLin pos),Some '\n')
-        let rec readAllChars input =
-            [
-                let remainingInput,charOpt = next input 
-                match charOpt with
-                | None -> 
-                    ()
-                | Some ch -> 
-                    yield ch
-                    yield! readAllChars remainingInput
-            ]
     [<AutoOpen>]
     module Parser =
         [<AutoOpen>]

@@ -8,7 +8,7 @@ module Interpreter
         | Function of string list * Expression 
         | Lambda of string * Expression 
     and Envirement = list<string * Expression>
-    type 'a Output = 
+    and 'a Output = 
         | Value of 'a
         | Failed of string
     
@@ -122,15 +122,12 @@ module Interpreter
                     let substitute' = substitute arg param  
                     match body with
                     | Atom id ->
-                        let result = if id = param then arg
-                                     else  body 
-                        Value result
+                        if id = param then Value arg
+                        else Value body 
                     | Applicative(fn, arg) -> 
-                        match substitute' fn with 
-                        | Value fn' ->
-                            let result = Applicative(fn',arg)
-                            Value result
-                        | Failed _ as error -> error 
+                        match substitute' fn, substitute' arg  with 
+                        | Value(fn'), Value(arg') ->  Value (Applicative(fn',arg'))
+                        | (Failed(msg) ,_) | (_, Failed (msg)) -> Failed msg 
                     | Lambda(local, body') -> 
                         if local = param then Value body 
                         else 
@@ -168,6 +165,7 @@ module Interpreter
                     function
                     | Atom _ -> false
                     | Applicative (Lambda(_), _) -> true
+                    | Applicative (Function(_), _) -> true
                     | Applicative (lhs, rhs) -> 
                         isBetaRedex lhs || isBetaRedex rhs
                     | Lambda (_, body) ->
@@ -184,8 +182,9 @@ module Interpreter
                         | Value body' -> 
                             Lambda (arg, body') |> Value 
                         | error -> error
-                    | Applicative(lhs, rhs) -> 
-                        match isBetaRedex lhs,isBetaRedex rhs with 
+                    | Applicative(lhs, rhs) ->
+                        let lhsc,rhsc = isBetaRedex lhs,isBetaRedex rhs 
+                        match lhsc,rhsc with 
                         | (true, _) -> 
                             match reduce lhs with 
                             | Value v ->  Applicative (v, rhs) |> Value
@@ -207,7 +206,7 @@ module Interpreter
                     | _ -> Value expr
                 loop expression                          
             evaluate term
-        | Parsec.Parser.Failure (_,msg,_) -> Failed msg
+        | error -> error |> toResult |> Failed  
 
     let toString expr = 
         match expr with 
