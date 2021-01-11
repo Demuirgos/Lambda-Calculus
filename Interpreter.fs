@@ -135,23 +135,22 @@ module Interpreter
                                 (local, arg)
                                 ||> occurs
                                  |> snd
-                            let t = if occurence then 
-                                        let localVars = allVariables body
-                                        let result = ['a'..'z']
-                                                     |> Seq.map (fun c -> c.ToString())
-                                                     |> Seq.tryFind (not << localVars.Contains)
-                                                     |> Option.map (fun repl -> 
-                                                         match repl /> body with
-                                                         | Value v -> substitute' <| v 
-                                                         | Failed _ as error ->  error )
-                                        match result with 
-                                        | Some v -> v
-                                        | _ -> Failed "Exhausted variable names for α-conversion"
-                                    else
-                                        match substitute' body' with 
-                                        | Value body'' -> Lambda (local, body'') |> Value
-                                        | Failed _ as error -> error 
-                            t
+                            if occurence then 
+                                let localVars = allVariables body
+                                let result = ['a'..'z']
+                                             |> Seq.map (fun c -> c.ToString())
+                                             |> Seq.tryFind (not << localVars.Contains)
+                                             |> Option.map (fun repl -> 
+                                                 match repl /> body with
+                                                 | Value v -> substitute' <| v 
+                                                 | Failed _ as error ->  error )
+                                match result with 
+                                | Some v -> v
+                                | _ -> Failed "Exhausted variable names for α-conversion"
+                            else
+                                match substitute' body' with 
+                                | Value body'' -> Lambda (local, body'') |> Value
+                                | Failed _ as error -> error
                     | Function(_) as f -> 
                         f |> curry |> substitute'
                 function
