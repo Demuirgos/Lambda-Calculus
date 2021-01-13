@@ -2,7 +2,7 @@
 module Parsec
     open FSharp.Core
     
-    let toString = (List.map string) >> List.reduce (+) 
+    let inline toString l = l |> ((List.map string) >> List.reduce (+))
     
     type Error = string
     [<AutoOpen>]
@@ -209,12 +209,11 @@ module Parsec
                     seq |> sequence
                 let rec loop input parser =
                     match run input parser with
-                    | Failure (label, msg, pos) ->
-                        ([],input)
                     | Success (firstValue,inputAfterFirstParse) ->
                         let (subsequentValues,remainingInput) = loop inputAfterFirstParse parser
                         let values = firstValue::subsequentValues
                         (values,remainingInput)
+                    | _ -> ([],input)
                 match run input initialParser with 
                 | Failure (label, msg, pos) when offset <> 0 -> Failure (label, msg, pos)
                 | _ -> Success (loop input parser)
