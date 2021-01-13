@@ -47,8 +47,8 @@ module Interpreter
                 let pLmbda = anyOf [ '\\'; 'λ']; 
                 let pVar = ['a'..'z'] |> Seq.toList |> anyOf |> many 1 
                 let pDot = expect '.'
-                let! func = pLmbda >>. pVar .>> pDot .>>. parseExpression 
-                return func
+                let! lmbda = pLmbda >>. pVar .>> pDot .>>. parseExpression 
+                return lmbda
             } <?> "Lambda" |>> fun (var,body) -> Lambda (var |> toString ,body)
         and parseExpression  = 
             Parser {
@@ -131,27 +131,25 @@ module Interpreter
                     | Lambda(local, body') -> 
                         if local = param then Value body 
                         else 
-                            let occurence = 
-                                (local, arg)
-                                ||> occurs
-                                 |> snd
-                            let t = if occurence then 
-                                        let localVars = allVariables body
-                                        let result = ['a'..'z']
-                                                     |> Seq.map (fun c -> c.ToString())
-                                                     |> Seq.tryFind (not << localVars.Contains)
-                                                     |> Option.map (fun repl -> 
-                                                         match repl /> body with
-                                                         | Value v -> substitute' <| v 
-                                                         | Failed _ as error ->  error )
-                                        match result with 
-                                        | Some v -> v
-                                        | _ -> Failed "Exhausted variable names for α-conversion"
-                                    else
-                                        match substitute' body' with 
-                                        | Value body'' -> Lambda (local, body'') |> Value
-                                        | Failed _ as error -> error 
-                            t
+                            let occurence = (local, arg)
+                                            ||> occurs
+                                             |> snd
+                            if occurence then 
+                                let localVars = allVariables body
+                                let result = ['a'..'z']
+                                             |> Seq.map (fun c -> c.ToString())
+                                             |> Seq.tryFind (not << localVars.Contains)
+                                             |> Option.map (fun repl -> 
+                                                 match repl /> body with
+                                                 | Value v -> substitute' <| v 
+                                                 | Failed _ as error ->  error )
+                                match result with 
+                                | Some v -> v
+                                | _ -> Failed "Exhausted variable names for α-conversion"
+                            else
+                                match substitute' body' with 
+                                | Value body'' -> Lambda (local, body'') |> Value
+                                | Failed _ as error -> error 
                     | Function(_) as f -> 
                         f |> curry |> substitute'
                 function
