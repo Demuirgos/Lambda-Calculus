@@ -7,29 +7,17 @@ module Interpreter
         | Applicative of Expression * Expression
         | Function of string list * Expression 
         | Lambda of string * Expression 
-<<<<<<< Updated upstream
-    and Envirement = list<string * Expression>
-    type 'a Output = 
-        | Value of 'a
-        | Failed of string
-    
-=======
     and 'a Output = 
         | Value of 'a
         | Failed of string
     and Envirement = list<string * Expression>
 
->>>>>>> Stashed changes
     let rec curry =
         function 
         | Function (arguments,body) ->
             match arguments with 
             | [arg]       -> Lambda (arg,body)
-<<<<<<< Updated upstream
-            | arg :: args -> Lambda (arg, (args, body) |> Function |> curry  )
-=======
             | arg :: args -> Lambda (arg, (args, body) |> Function |> curry )
->>>>>>> Stashed changes
             | _ -> body
         | _ -> failwith "Expression cannot be curried"
     
@@ -134,24 +122,12 @@ module Interpreter
                     let substitute' = substitute arg param  
                     match body with
                     | Atom id ->
-<<<<<<< Updated upstream
-                        let result = if id = param then arg
-                                     else  body 
-                        Value result
-                    | Applicative(fn, arg) -> 
-                        match substitute' fn with 
-                        | Value fn' ->
-                            let result = Applicative(fn',arg)
-                            Value result
-                        | Failed _ as error -> error 
-=======
                         if id = param then Value arg
                         else Value body 
                     | Applicative(fn, arg) -> 
                         match substitute' fn, substitute' arg  with 
                         | Value(fn'), Value(arg') ->  Value (Applicative(fn',arg'))
                         | (Failed(msg) ,_) | (_, Failed (msg)) -> Failed msg 
->>>>>>> Stashed changes
                     | Lambda(local, body') -> 
                         if local = param then Value body 
                         else 
@@ -189,10 +165,7 @@ module Interpreter
                     function
                     | Atom _ -> false
                     | Applicative (Lambda(_), _) -> true
-<<<<<<< Updated upstream
-=======
                     | Applicative (Function(_), _) -> true
->>>>>>> Stashed changes
                     | Applicative (lhs, rhs) -> 
                         isBetaRedex lhs || isBetaRedex rhs
                     | Lambda (_, body) ->
@@ -209,14 +182,9 @@ module Interpreter
                         | Value body' -> 
                             Lambda (arg, body') |> Value 
                         | error -> error
-<<<<<<< Updated upstream
-                    | Applicative(lhs, rhs) -> 
-                        match isBetaRedex lhs,isBetaRedex rhs with 
-=======
                     | Applicative(lhs, rhs) ->
                         let lhsc,rhsc = isBetaRedex lhs,isBetaRedex rhs 
                         match lhsc,rhsc with 
->>>>>>> Stashed changes
                         | (true, _) -> 
                             match reduce lhs with 
                             | Value v ->  Applicative (v, rhs) |> Value
@@ -238,11 +206,7 @@ module Interpreter
                     | _ -> Value expr
                 loop expression                          
             evaluate term
-<<<<<<< Updated upstream
-        | Parsec.Parser.Failure (_,msg,_) -> Failed msg
-=======
         | error -> error |> toResult |> Failed  
->>>>>>> Stashed changes
 
     let toString expr = 
         match expr with 
