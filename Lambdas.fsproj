@@ -1,18 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <OutputType>exe</OutputType>
     <TargetFramework>net5.0</TargetFramework>
   </PropertyGroup>
-
   <ItemGroup>
     <Compile Include="Parsec.fs" />
     <Compile Include="interpreter.fs" />
+    <Compile Include="Abstractor.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
-
-  <!--ItemGroup>
-    <PackageReference Include="FParsec" Version="1.1.1" />
-  </ItemGroup-->
-
 </Project>
