@@ -3,8 +3,8 @@ module Syntax
     open Parsec
     type Thunk = Interpreter.Expression 
     type Statement = 
-        | Iden    of Statement //*
-        | Bind    of Statement * Statement list //*
+        | Iden    of string //*
+        | Bind    of Statement * Statement //*
         | List    of Statement list //*
         | Term    of Statement list * Statement //*
         | BiOp    of Statement * Statement * Statement //*
@@ -30,7 +30,7 @@ module Syntax
         let rec parseLet =
             Parser {
                 let consumeLet = "let" |> Seq.toList |> allOf
-                let id = ['a'..'z'] |> Seq.toList |> anyOf |> many 1 
+                let id = ['a'..'z'] |> Seq.toList |> anyOf |> many 1 |>> (string >> Iden)
                 let consumeEq = expect '='
                 let binds = parseProgram 
                 let letparser = consumeLet >>. pSpaces >>. id .>> pSpaces .>> consumeEq .>>. binds
@@ -45,30 +45,32 @@ module Syntax
             } <?> "Applicative" |>> Prog
         and parseIden = 
             Parser {
-                let pVar = ['a'..'z'] |> Seq.toList |> anyOf |> many 1 
-                return! pVar
-            } <?> "Identifier" |>> Iden
+                let! pVar = ['a'..'z'] |> Seq.toList |> anyOf |> many 1 
+                return pVar
+            } <?> "Identifier" |>> (toString >> Iden)
         and parseList = 
             Parser {
                 let pElems p = between (expect '[') p (expect '}') 
                 let elem = parseIden <|> parseList <|> parseTerm <|> parseOperation
-                let elements = pElems elem
+                let elements =  separate1By (pElems elem) (expect ',') 
                 return! elements
             } <?> "List" |>> List
         and parseTerm  = 
             Parser {
-                return! parseIden .>> pSpaces .>>. parseIden
-            } <?> "Lambda" |> Term
+                let pArrow = "=>" |> Seq.toList |> allOf
+                let mParams = many 1 parseIden
+                return! mParams .>> pSpaces .>> pArrow .>>. parseProgram
+            } <?> "Lambda" |>> Term
         and parseBinary  = 
             Parser {
-                let binOper = ['+','-','/','*'] |> anyOf
+                let binOper = ['+';'-';'/';'*'] |> anyOf |>> (string >> Iden)
                 return! parseIden .>>  pSpaces .>>. binOper .>> pSpaces .>>. parseIden
-            } <?> "Binary Term" |> BiOp
+            } <?> "Binary Term" |>> (fun ((lhs,op),rhs) -> (lhs,op,rhs) |> BiOp)
         and parseOperation  = 
             Parser {
-                let pArgs = pSpaces >>. parseIden |> many 0   
+                let pArgs = pSpaces >>. parseIden |> many 1
                 return! parseIden .>>. pArgs
-            } <?> "Applicative Term" |> Oper
+            } <?> "Applicative Term" |>> Oper
         and parseExpression = 
             Parser {
                 let! expr = 
