@@ -63,8 +63,9 @@ module Syntax
             } <?> "Lambda" |>> Term
         and parseBinary  = 
             Parser {
+                let operand = parseIden <|> parseOperation
                 let binOper = ['+';'-';'/';'*'] |> anyOf |>> (string >> Iden)
-                return! parseIden .>>  pSpaces .>>. binOper .>> pSpaces .>>. parseIden
+                return! operand .>>  pSpaces .>>. binOper .>> pSpaces .>>. operand
             } <?> "Binary Term" |>> (fun ((lhs,op),rhs) -> (lhs,op,rhs) |> BiOp)
         and parseOperation  = 
             Parser {
