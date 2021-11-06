@@ -21,7 +21,7 @@ let test _ =
     let rec loop () = 
         let input  = Console.ReadLine >> sprintf "%s"
         let result = Transpile << input <| ()
-                    |> printf "%s\n"
+                    |> printf "%A\n"
         result |> loop
     loop ()
     0

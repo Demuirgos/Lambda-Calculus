@@ -95,6 +95,6 @@ module Abstractor
             } <?> "Expression" 
         parseLet
     let Transpile input = 
-        (fromStr input, parseExpr) 
-            ||> run 
-             |> toResult
+        let ast = (fromStr input, parseExpr) 
+                  ||> run |> toResult
+        ast
