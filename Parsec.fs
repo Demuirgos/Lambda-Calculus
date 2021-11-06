@@ -255,3 +255,4 @@ module Parsec
     module Predefined = 
         let pSpaces = many 0 (expect ' ')
         let cleanStr s = s |> String.filter (function | ' ' | '\n' -> false | _ -> true)
+        let betweenC (s,f) p = between (expect s) p (expect f)

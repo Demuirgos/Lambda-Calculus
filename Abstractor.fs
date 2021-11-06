@@ -6,10 +6,11 @@ module Abstractor
         | Iden    of string 
         | Bind    of Statement * Statement 
         | List    of Statement list 
-        | Term    of Statement list * Statement 
-        | BiOp    of Statement * Statement * Statement 
+        | Lambda    of Statement list * Statement 
+        | BiOp    of Statement * BinaryOp * Statement 
         | Prog    of Statement list * Statement     
-        | Oper    of Statement * Statement list      
+        | Oper    of Statement * Statement list
+    and BinaryOp   = Add | Subs | Div | Mult      
     and Envirement = list<Expression * Thunk>
     #nowarn "40"
 
@@ -25,7 +26,12 @@ module Abstractor
         // let a = 5
         // let b = 6
         // a + b
-
+    let parseBiOp = function
+        | Iden("+") -> Add 
+        | Iden("-") -> Subs
+        | Iden("*") -> Mult
+        | Iden("/") -> Div
+        | _   -> failwith "Not a binary Operation"
     let parseExpr = 
         let rec parseLet =
             Parser {
@@ -38,7 +44,7 @@ module Abstractor
         and parseProgram = 
             Parser {
                 let pStatements = many 0 parseLet
-                let returnVal = parseBinary <|> parseOperation <|> parseIden <|> parseList
+                let returnVal = parseBinary <|> parseOperation <|> parseList <|> parseIden 
                 let! app = pStatements .>>. returnVal
                 return app 
             } <?> "Applicative" |>> Prog
@@ -49,24 +55,27 @@ module Abstractor
             } <?> "Identifier" |>> (toString >> Iden)
         and parseList = 
             Parser {
-                let pElems p = between (expect '[') p (expect '}') 
-                let elem = parseIden <|> parseList <|> parseTerm <|> parseOperation
-                let elements =  separate1By (pElems elem) (expect ',') 
-                return! elements
+                let pElem = parseBinary <|> parseIden <|> parseList <|> parseLambda <|> parseOperation
+                let pList =  ';'|> expect >>. pSpaces 
+                                |> separate1By pElem
+                                |> betweenC ('[',']') 
+                return! pList
             } <?> "List" |>> List
-        and parseTerm  = 
+        and parseLambda  = 
             Parser {
                 let pArrow = "=>" |> Seq.toList |> allOf
-                let pArgs = many 0 (parseIden .>> expect ',') .>> pSpaces .>>. parseIden
-                let mParams = expect '(' >>. pSpaces >>. pArgs .>> pSpaces .>> expect ')'
+                let pArgs = many 1 parseIden 
+                let mParams =  ','  |> expect >>. pSpaces
+                                    |> separate1By pArgs
+                                    |> betweenC ('(',')') 
                 return! mParams .>> pSpaces .>> pArrow .>> pSpaces .>>. parseExpression
-            } <?> "Lambda" |>> (fun ((args,arg),rhs) -> (args@[arg],rhs) |> Term)
+            } <?> "Lambda" |>> (fun (args, elem2) -> (List.concat args, elem2) |> Lambda)
         and parseBinary  = 
             Parser {
                 let operand = parseIden <|> parseOperation
-                let binOper = ['+';'-';'/';'*'] |> anyOf |>> (string >> Iden)
+                let binOper = ['+';'-';'/';'*'] |> anyOf |>> (string  >> Iden)
                 return! operand .>>  pSpaces .>>. binOper .>> pSpaces .>>. operand
-            } <?> "Binary Term" |>> (fun ((lhs,op),rhs) -> (lhs,op,rhs) |> BiOp)
+            } <?> "Binary Lambda" |>> (fun ((lhs,op),rhs) -> (lhs,parseBiOp op,rhs) |> BiOp)
         and parseOperation  = 
             Parser {
                 let pArgs = pSpaces >>. parseIden |> many 1
@@ -79,7 +88,7 @@ module Abstractor
                         parseProgram
                         parseBinary     
                         parseOperation      
-                        parseTerm
+                        parseLambda
                         parseList             
                         parseIden    
                     ] 
