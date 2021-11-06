@@ -43,15 +43,14 @@ module Abstractor
             } <?> "Let" |>> Bind
         and parseProgram = 
             Parser {
-                let pStatements = many 0 parseLet
+                let pStatements = many 0 (parseLet .>> anyOf ['\n'; '\r'])
                 let returnVal = parseBinary <|> parseOperation <|> parseList <|> parseIden 
                 let! app = pStatements .>>. returnVal
                 return app 
             } <?> "Applicative" |>> Prog
         and parseIden = 
             Parser {
-                let! pVar = ['a'..'z'] |> Seq.toList |> anyOf |> many 1 
-                return pVar
+                return! ['a'..'z'] |> Seq.toList |> anyOf |> many 1 
             } <?> "Identifier" |>> (toString >> Iden)
         and parseList = 
             Parser {
@@ -75,7 +74,7 @@ module Abstractor
                 let operand = parseIden <|> parseOperation
                 let binOper = ['+';'-';'/';'*'] |> anyOf |>> (string  >> Iden)
                 return! operand .>>  pSpaces .>>. binOper .>> pSpaces .>>. operand
-            } <?> "Binary Lambda" |>> (fun ((lhs,op),rhs) -> (lhs,parseBiOp op,rhs) |> BiOp)
+            } <?> "Binary Operation" |>> (fun ((lhs,op),rhs) -> (lhs,parseBiOp op,rhs) |> BiOp)
         and parseOperation  = 
             Parser {
                 let pArgs = pSpaces >>. parseIden |> many 1
