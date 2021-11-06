@@ -1,8 +1,8 @@
 open System
 open Interpreter
+open Abstractor
 
-[<EntryPoint>]
-let REPL  =
+let REPL _ =
     Console.OutputEncoding <- Text.Encoding.Unicode
     let prefix = "λ >"
     let read = Console.ReadLine >> sprintf "%s"
@@ -15,3 +15,13 @@ let REPL  =
         prefix |> printf "%s"
         |> read |> eval |> print |> loop
     loop prefix
+
+[<EntryPoint>]
+let test _ =
+    let rec loop () = 
+        let input  = Console.ReadLine >> sprintf "%s"
+        let result = Transpile << input <| ()
+                    |> printf "%s\n"
+        result |> loop
+    loop ()
+    0

@@ -253,4 +253,5 @@ module Parsec
             {Function = innerProcess; Label = "EOF"}
     [<AutoOpen>]
     module Predefined = 
-        let pSpaces = many 1 (expect ' ')
+        let pSpaces = many 0 (expect ' ')
+        let cleanStr s = s |> String.filter (function | ' ' | '\n' -> false | _ -> true)

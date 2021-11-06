@@ -2,6 +2,7 @@ module Interpreter
     open Parsec
     open FSharp.Core
     #nowarn "40"
+
     type Expression = 
         | Atom of string
         | Applicative of Expression * Expression
@@ -41,7 +42,7 @@ module Interpreter
                 let pDot = expect '.'
                 let! func = pLmbda >>. pVars .>> pDot .>>. parseExpression 
                 return func
-            } <?> "Function" |>> fun (var,body) -> Function (var |> List.map toString ,body)
+            } <?> "Function" |>> fun (parameters,body) -> Function (parameters |> List.map toString ,body)
         and parseLambda = 
             Parser {
                 let pLmbda = anyOf [ '\\'; 'λ']; 
@@ -49,7 +50,7 @@ module Interpreter
                 let pDot = expect '.'
                 let! lmbda = pLmbda >>. pVar .>> pDot .>>. parseExpression 
                 return lmbda
-            } <?> "Lambda" |>> fun (var,body) -> Lambda (var |> toString ,body)
+            } <?> "Lambda" |>> fun (param,body) -> Lambda (param |> toString ,body)
         and parseExpression  = 
             Parser {
                 let! expr = 
