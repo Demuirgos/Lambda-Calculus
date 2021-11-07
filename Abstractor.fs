@@ -5,7 +5,7 @@ module Abstractor
     type Statement = 
         | Identifier        of string 
         | Bind              of Statement * Statement * Statement 
-        | Function            of Statement list * Statement 
+        | Function          of Statement list * Statement 
         | Application       of Statement * Statement list
     and BinaryOp   = Add | Subs | Div | Mult      
     #nowarn "40"
