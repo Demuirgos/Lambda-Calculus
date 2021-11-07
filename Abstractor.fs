@@ -5,25 +5,11 @@ module Abstractor
     type Statement = 
         | Identifier        of string 
         | Bind              of Statement * Statement * Statement 
-        | Lambda            of Statement list * Statement 
+        | Function            of Statement list * Statement 
         | Application       of Statement * Statement list
     and BinaryOp   = Add | Subs | Div | Mult      
     #nowarn "40"
 
-    // let x = 5 in 6                      => Bind(x,5)
-                                        // => (\x.6 5)
-    // let f = (y,z) -> z * y              => Bind(f,lambda([y;z], operation(mult,args(z,y))))
-                                        // => \f.\y.\z.(z*y)
-    // let a = f x                         => Bind(a,application(f,x)) 
-                                        // => \a.(f x)
-    // let a = [e;f;g;h]                   => Bind(a,cons(e,cons(f,cons(f,cons(g,cons(h,nil))))))
-
-    // let z =                             => Bind(z,Programram([Bind(a,5);Bind(b,6)]m,binOp(a,add,b)))
-        // let a = 5
-        // let b = 6
-        // a + b
-
-    // f(x,y,z) = x => \x.\y.\z.x 
     let parseExpr = 
         let rec parseLet =
             Parser {
@@ -38,7 +24,7 @@ module Abstractor
             Parser {
                 return! ['a'..'z'] |> Seq.toList |> anyOf |> many 1 
             } <?> "Identifier" |>> (toString >> Identifier)
-        and parseLambda  = 
+        and parseFunction  = 
             Parser {
                 let pArrow = "=>" |> Seq.toList |> allOf
                 let pArgs = many 1 parseIdentifier 
@@ -46,7 +32,7 @@ module Abstractor
                                     |> separate1By pArgs
                                     |> betweenC ('(',')') 
                 return! mParams .>> pSpaces .>> pArrow .>> pSpaces .>>. parseExpression
-            } <?> "Lambda" |>> (fun (args, value) -> (List.concat args, value) |> Lambda)
+            } <?> "Function" |>> (fun (args, value) -> (List.concat args, value) |> Function)
         and parseOperation  = 
             Parser {
                 let pArgs=  ','  |> expect >>. pSpaces
@@ -60,22 +46,20 @@ module Abstractor
                     choice [    
                         parseLet
                         parseOperation      
-                        parseLambda
+                        parseFunction
                         parseIdentifier    
                     ] 
                 return expr
             } <?> "Expression" 
         parseLet
     let transpile input = 
+        // make this function emit lambda AST instead of parsable strings
         let rec curry =
             function 
-            | Lambda ([h],_) as input ->
+            | Function ([h],_) as input ->
                 input
-            | Lambda (h::t,body) ->
-                Lambda (
-                    [h], 
-                    curry <| Lambda(t, body)
-                )
+            | Function (h::t,body) ->
+                Function ([h], curry <| Function(t, body))
             | _ -> failwith "Expression cannot be curried"
 
         let Result = (fromStr input, parseExpr) 
@@ -85,8 +69,8 @@ module Abstractor
             let rec emitLambda= function
                 | Bind(name, expr, value) ->
                     sprintf "(\\%s.%s %s)" (emitLambda name) (emitLambda value) (emitLambda  expr)
-                | Lambda(parameters, expr) as f->
-                    let emit = function | Lambda([param], expr) -> sprintf "\\%s.%s" (emitLambda param) (emitLambda expr)
+                | Function(parameters, expr) as f->
+                    let emit = function | Function([param], expr) -> sprintf "\\%s.%s" (emitLambda param) (emitLambda expr)
                                         | _ -> failwithf "%A is not a lambda, transpiling failed" (nameof f)
                     match parameters with 
                     | [] | [_] -> emit f
@@ -96,3 +80,11 @@ module Abstractor
                 | Identifier(name) -> name
             emitLambda program
         | Failure _ -> toResult Result
+    
+    let rec uncompile =
+        function 
+        | Applicative(f, args) ->
+            Application(uncompile f, [uncompile args])
+        | Lambda(p, b) -> 
+            Function([uncompile p], uncompile b)
+        | Atom(name) -> Identifier(name)

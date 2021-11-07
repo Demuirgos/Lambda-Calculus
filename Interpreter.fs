@@ -6,7 +6,7 @@ module Interpreter
     type Expression = 
         | Atom of string
         | Applicative of Expression * Expression
-        | Lambda of string * Expression 
+        | Lambda of Expression * Expression 
     and 'a Output = 
         | Value of 'a
         | Failed of string
@@ -28,11 +28,10 @@ module Interpreter
         and parseLambda = 
             Parser {
                 let pLmbda = anyOf [ '\\'; 'λ']; 
-                let pVar = ['a'..'z'] |> Seq.toList |> anyOf |> many 1 
                 let pDot = expect '.'
-                let! lmbda = pLmbda >>. pVar .>> pDot .>>. parseExpression 
+                let! lmbda = pLmbda >>. parseAtom .>> pDot .>>. parseExpression 
                 return lmbda
-            } <?> "Lambda" |>> fun (param,body) -> Lambda (param |> toString ,body)
+            } <?> "Lambda" |>> fun (param,body) -> Lambda (param ,body)
         and parseExpression  = 
             Parser {
                 let! expr = 
@@ -54,7 +53,7 @@ module Interpreter
                     let isThere = id = identifier
                     (isThere, isThere)
                 | Lambda (arg, body) -> 
-                    let inArg = arg = identifier
+                    let inArg = arg = Atom(identifier)
                     let inBody = (identifier, body) ||> occurs |> fst 
                     (inArg || inBody, inArg && inBody)
                 | Applicative(lhs, rhs) -> 
@@ -71,9 +70,9 @@ module Interpreter
                     | Lambda        (arg, body)  -> Lambda      (arg,convert' body)
                 match occurs id lambda with 
                 | (true,_) -> 
-                   Failed (sprintf "New name '%s' already appears in %A" id lambda)
+                   Failed (sprintf "New name '%A' already appears in %A" id lambda)
                 | _ -> match lambda with 
-                       | Lambda (arg,body) -> Lambda (id, convert arg id body) |> Value 
+                       | Lambda (Atom(arg),body) -> Lambda (Atom(id), convert arg id body) |> Value 
                        | _ -> Failed (sprintf "α-conversion not supported for %A" lambda)
             let (/>) = ``α Convert``
 
@@ -87,7 +86,8 @@ module Interpreter
                                     yield! loop func
                                     yield! loop arg
                                 | Lambda (param, body) ->
-                                    yield param
+                                    yield match param with  | Atom(name) -> name 
+                                                            | _ -> failwith "not a valid parameter for Lambda"
                                     yield! loop body
                         }
                     loop expr |> Set.ofSeq
@@ -101,7 +101,7 @@ module Interpreter
                         match substitute' fn, substitute' arg  with 
                         | Value(fn'), Value(arg') ->  Value (Applicative(fn',arg'))
                         | (Failed(msg) ,_) | (_, Failed (msg)) -> Failed msg 
-                    | Lambda(local, body') -> 
+                    | Lambda(Atom(local), body') -> 
                         if local = param then Value body 
                         else 
                             let occurence = (local, arg)
@@ -121,10 +121,11 @@ module Interpreter
                                 | _ -> Failed "Exhausted variable names for α-conversion"
                             else
                                 match substitute' body' with 
-                                | Value body'' -> Lambda (local, body'') |> Value
-                                | Failed _ as error -> error 
+                                | Value body'' -> Lambda (Atom(local), body'') |> Value
+                                | Failed _ as error -> error
+                    | _ -> Failed "β-redex : Subtitution Failed"  
                 function
-                | Applicative (Lambda (param, body), arg) ->
+                | Applicative (Lambda (Atom(param), body), arg) ->
                     substitute arg param body
                 | expression -> Failed <| sprintf "%A is not a β-redex" expression
             let (</) () expr= ``β-redex`` expr
@@ -177,7 +178,10 @@ module Interpreter
         | Value v ->
             let rec toString' term = 
                 match term with 
-                | Lambda(arg,body) -> sprintf "λ%s.%s" arg (toString' body)
+                | Lambda(arg,body) -> 
+                    match arg with 
+                    | Atom(name) -> sprintf "λ%s.%s" name (toString' body)
+                    | _ -> failwith "invalid Lambda parameter"
                 | Atom(v) -> sprintf "%s" v
                 | Applicative(lhs,rhs) -> sprintf "(%s %s)" (toString' lhs) (toString' rhs)
             toString' v
