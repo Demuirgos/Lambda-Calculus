@@ -76,7 +76,11 @@ module Abstractor
                     | [] | [_] -> emit f
                     | _ -> emit (curry f)
                 | Application(expr, args) ->
-                    sprintf "(%s%s)" (emitLambda expr) (args |> List.fold (fun acc e -> sprintf "%s %s" acc (emitLambda e)) "") 
+                    let operation = sprintf "%s" (emitLambda expr)
+                    let rec wrap op = function
+                        | [] -> op
+                        | h::t -> wrap (sprintf "(%s %s)" op (emitLambda h)) t
+                    sprintf "%s" (wrap operation args)
                 | Identifier(name) -> name
             emitLambda program
         | Failure _ -> toResult Result
