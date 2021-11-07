@@ -22,12 +22,8 @@ module Abstractor
         // let a = 5
         // let b = 6
         // a + b
-    let parseBiOp = function
-        | Identifier("+") -> Add 
-        | Identifier("-") -> Subs
-        | Identifier("*") -> Mult
-        | Identifier("/") -> Div
-        | _   -> failwith "Not a binary Operation"
+
+    // f(x,y,z) = x => \x.\y.\z.x 
     let parseExpr = 
         let rec parseLet =
             Parser {
@@ -50,7 +46,7 @@ module Abstractor
                                     |> separate1By pArgs
                                     |> betweenC ('(',')') 
                 return! mParams .>> pSpaces .>> pArrow .>> pSpaces .>>. parseExpression
-            } <?> "Lambda" |>> (fun (args, elem2) -> (List.concat args, elem2) |> Lambda)
+            } <?> "Lambda" |>> (fun (args, value) -> (List.concat args, value) |> Lambda)
         and parseOperation  = 
             Parser {
                 let pArgs=  ','  |> expect >>. pSpaces
@@ -71,6 +67,17 @@ module Abstractor
             } <?> "Expression" 
         parseLet
     let transpile input = 
+        let rec curry =
+            function 
+            | Lambda ([h],_) as input ->
+                input
+            | Lambda (h::t,body) ->
+                Lambda (
+                    [h], 
+                    curry <| Lambda(t, body)
+                )
+            | _ -> failwith "Expression cannot be curried"
+
         let Result = (fromStr input, parseExpr) 
                      ||> run
         match Result with
@@ -78,8 +85,12 @@ module Abstractor
             let rec emitLambda= function
                 | Bind(name, expr, value) ->
                     sprintf "(\\%s.%s %s)" (emitLambda name) (emitLambda value) (emitLambda  expr)
-                | Lambda(h::t, expr) -> 
-                    sprintf "(\\%s.%s)" ((t) |> List.fold (fun acc e -> sprintf "%s %s" acc (emitLambda e)) (emitLambda h)) (emitLambda expr)
+                | Lambda(parameters, expr) as f->
+                    let emit = function | Lambda([param], expr) -> sprintf "\\%s.%s" (emitLambda param) (emitLambda expr)
+                                        | _ -> failwithf "%A is not a lambda, transpiling failed" (nameof f)
+                    match parameters with 
+                    | [] | [_] -> emit f
+                    | _ -> emit (curry f)
                 | Application(expr, args) ->
                     sprintf "(%s%s)" (emitLambda expr) (args |> List.fold (fun acc e -> sprintf "%s %s" acc (emitLambda e)) "") 
                 | Identifier(name) -> name

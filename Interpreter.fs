@@ -6,21 +6,12 @@ module Interpreter
     type Expression = 
         | Atom of string
         | Applicative of Expression * Expression
-        | Function of string list * Expression 
         | Lambda of string * Expression 
     and 'a Output = 
         | Value of 'a
         | Failed of string
     and Envirement = list<string * Expression>
 
-    let rec curry =
-        function 
-        | Function (arguments,body) ->
-            match arguments with 
-            | [arg]       -> Lambda (arg,body)
-            | arg :: args -> Lambda (arg, (args, body) |> Function |> curry )
-            | _ -> body
-        | _ -> failwith "Expression cannot be curried"
     
     let parseExpr = 
         let rec parseAtom =
@@ -34,15 +25,6 @@ module Interpreter
                 let! app = pParens ( parseExpression .>> pSpaces .>>. parseExpression )
                 return app 
             } <?> "Applicative" |>> Applicative
-        and parseFunction = 
-            Parser {
-                let pLmbda = anyOf [ '\\'; 'λ']; 
-                let pVar = ['a'..'z'] |> Seq.toList |> anyOf |> many 1 
-                let pVars = pVar .>> option (pSpaces) |> many 1  
-                let pDot = expect '.'
-                let! func = pLmbda >>. pVars .>> pDot .>>. parseExpression 
-                return func
-            } <?> "Function" |>> fun (parameters,body) -> Function (parameters |> List.map toString ,body)
         and parseLambda = 
             Parser {
                 let pLmbda = anyOf [ '\\'; 'λ']; 
@@ -55,10 +37,9 @@ module Interpreter
             Parser {
                 let! expr = 
                     choice [    
-                        parseAtom   ;  
-                        parseApp    ;    
-                        parseLambda ;
-                        parseFunction    
+                        parseAtom     
+                        parseApp        
+                        parseLambda 
                     ] 
                 return expr
             } <?> "Expression" 
@@ -76,8 +57,6 @@ module Interpreter
                     let inArg = arg = identifier
                     let inBody = (identifier, body) ||> occurs |> fst 
                     (inArg || inBody, inArg && inBody)
-                | Function (_) as f ->
-                    f |> curry |> occurs identifier
                 | Applicative(lhs, rhs) -> 
                     let isThere = (identifier,lhs) ||> occurs |> fst || (identifier,rhs) ||> occurs |> fst 
                     (isThere, isThere)
@@ -89,17 +68,12 @@ module Interpreter
                         if id = old then Atom rep
                         else expr
                     | Applicative   (lhs, rhs)   -> Applicative (convert' lhs, convert' rhs)
-                    | Function      (args, body) -> Function    (args,convert' body)
                     | Lambda        (arg, body)  -> Lambda      (arg,convert' body)
                 match occurs id lambda with 
                 | (true,_) -> 
                    Failed (sprintf "New name '%s' already appears in %A" id lambda)
                 | _ -> match lambda with 
                        | Lambda (arg,body) -> Lambda (id, convert arg id body) |> Value 
-                       | Function(_) as f -> 
-                            f 
-                            |> curry 
-                            |> ``α Convert`` id
                        | _ -> Failed (sprintf "α-conversion not supported for %A" lambda)
             let (/>) = ``α Convert``
 
@@ -115,8 +89,6 @@ module Interpreter
                                 | Lambda (param, body) ->
                                     yield param
                                     yield! loop body
-                                | Function (_) as f ->
-                                    yield! f |> curry |> loop 
                         }
                     loop expr |> Set.ofSeq
                 let rec substitute arg param body =
@@ -151,8 +123,6 @@ module Interpreter
                                 match substitute' body' with 
                                 | Value body'' -> Lambda (local, body'') |> Value
                                 | Failed _ as error -> error 
-                    | Function(_) as f -> 
-                        f |> curry |> substitute'
                 function
                 | Applicative (Lambda (param, body), arg) ->
                     substitute arg param body
@@ -164,13 +134,10 @@ module Interpreter
                     function
                     | Atom _ -> false
                     | Applicative (Lambda(_), _) -> true
-                    | Applicative (Function(_), _) -> true
                     | Applicative (lhs, rhs) -> 
                         isBetaRedex lhs || isBetaRedex rhs
                     | Lambda (_, body) ->
                         isBetaRedex body
-                    | Function(_) as f -> 
-                        f |> curry |> isBetaRedex
                 let rec reduce expr = 
                     match expr with 
                     | Atom _ -> Value expr
@@ -193,8 +160,6 @@ module Interpreter
                             | Value v ->  Applicative (lhs, v) |> Value
                             | error -> error
                         | _ -> Value expr
-                    | Function(_) as f -> 
-                        f |> curry |> reduce 
                 let rec loop expr =
                     match isBetaRedex expr with 
                     | true ->   expr 
@@ -215,8 +180,6 @@ module Interpreter
                 | Lambda(arg,body) -> sprintf "λ%s.%s" arg (toString' body)
                 | Atom(v) -> sprintf "%s" v
                 | Applicative(lhs,rhs) -> sprintf "(%s %s)" (toString' lhs) (toString' rhs)
-                | Function(_) as f -> 
-                    f |> curry |> toString' 
             toString' v
         | Failed e -> e
         
