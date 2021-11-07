@@ -17,11 +17,12 @@ let REPL _ =
     loop prefix
 
 [<EntryPoint>]
-let test _ =
+let main _ =
     let rec loop () = 
-        let input  = Console.ReadLine >> sprintf "%s"
-        let result = Transpile << input <| ()
-                    |> printf "%A\n"
-        result |> loop
+        let program = Console.ReadLine() |> sprintf "%s"
+        let lambdas = transpile program 
+        let results = interpret lambdas    
+        printf "%A\n" (program, lambdas, results)              
+        |> loop
     loop ()
     0
