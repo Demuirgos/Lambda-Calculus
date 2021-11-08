@@ -1,4 +1,4 @@
-# LambdaCalculus
+# OxaLC
 	a basic ML like language with a Lambda-Calculus based Compiler
 	
 # LambdaCalculus Language Grammar :
