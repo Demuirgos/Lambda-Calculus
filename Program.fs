@@ -13,7 +13,6 @@ let REPL args =
                     | Terminal   -> Console.ReadLine >> sprintf "%s"
                     | File(path) -> fun () -> [yield! File.ReadLines(path)]
                                               |> String.concat "\n"
-                                              |> sprintf "%s"
         let eval = transpile >> interpret
         let print= 
             function 
