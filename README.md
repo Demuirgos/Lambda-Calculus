@@ -4,7 +4,7 @@
 # LambdaCalculus Language Grammar :
 	 Terminology := 
 		| Application : "(λy.z x)" = (Lambda Terminology)
-		| Lambda      : "λx.y"     = (Name Terminology)  
+		| Lambda      : "λx.y"     = λName.Terminology 
 		| Name        : "x"        = [a-z]+
 		
 # MLAbstraction Language Grammar :
