@@ -3,11 +3,18 @@ module Abstractor
     open Parsec
     type Thunk = Interpreter.Expression 
     type Statement = 
+        | Value             of int
         | Identifier        of string 
         | Bind              of Statement * Statement * Statement 
-        | Function            of Statement list * Statement 
+        | Function          of Statement list * Statement 
         | Application       of Statement * Statement list
-    and BinaryOp   = Add | Subs | Div | Mult      
+        | Mathematic        of Statement * Operation * Statement
+    and Operation   =   Add | Subs | Div | Mult | Exp
+                        static member toOp token =
+                            match token with 
+                            | "*" -> Mult | "/" -> Div
+                            | "-" -> Subs | "^" -> Exp 
+                            | "+" -> Add  | _ -> failwith "Failed Parsing"
     #nowarn "40"
 
     let parseExpr = 
@@ -24,6 +31,10 @@ module Abstractor
             Parser {
                 return! ['a'..'z'] |> Seq.toList |> anyOf |> many 1 
             } <?> "Identifier" |>> (toString >> Identifier)
+        and parseValue =
+            Parser {
+                return! ['0'..'9'] |> Seq.toList |> anyOf |> many 1
+            } <?> "Value" |>> (List.map string >> List.toSeq >> String.concat "" >> int >> Value)
         and parseFunction  = 
             Parser {
                 let pArrow = "=>" |> Seq.toList |> allOf
@@ -40,6 +51,12 @@ module Abstractor
                                     |> betweenC ('(',')')
                 return! parseIdentifier .>>. pArgs
             } <?> "Applicative" |>> Application
+        and parseBinary  = 
+            Parser {
+                let operand = parseIdentifier <|> parseOperation <|> parseValue
+                let binOper = ['+';'-';'/';'*';'^'] |> anyOf |>> (string >> Operation.toOp)
+                return! operand .>>  pSpaces .>>. binOper .>> pSpaces .>>. operand
+            } <?> "Binary Term" |>> (fun ((lhs,op),rhs) -> (lhs,op,rhs) |> Mathematic)
         and parseExpression = 
             Parser {
                 let! expr = 
@@ -47,6 +64,8 @@ module Abstractor
                         parseLet
                         parseOperation      
                         parseFunction
+                        parseBinary
+                        parseValue
                         parseIdentifier    
                     ] 
                 return expr
@@ -82,6 +101,21 @@ module Abstractor
                         | h::t -> wrap (sprintf "(%s %s)" op (emitLambda h)) t
                     sprintf "%s" (wrap operation args)
                 | Identifier(name) -> name
+                | Mathematic(lhs, op, rhs) ->
+                    match op  with 
+                    | Add -> sprintf "\\g.\\v.((%s g) ((%s g) v))" (emitLambda lhs) (emitLambda rhs)
+                    | Mult-> sprintf "\\g.\\v.((%s (%s g)) v)" (emitLambda lhs) (emitLambda rhs)
+                    | Exp -> sprintf "(%s %s)" (emitLambda rhs) (emitLambda lhs)
+                    | Subs | Div -> failwith "not yet implimented"
+                | Value(var) -> 
+                    let funcn, varn = [for i in 1..var -> "f"] |> String.concat "", [for i in 1..var -> "x"] |> String.concat ""
+                    let prefix = sprintf "\\%s.\\%s." funcn varn
+                    let rec loop n = 
+                        match n with 
+                        | 0 -> sprintf "%s" varn
+                        | 1 -> sprintf "(%s %s)" funcn (loop (n - 1))
+                        | _ -> sprintf "(%s %s)" funcn (loop (n - 1))
+                    prefix + (loop var)
             emitLambda program
         | Failure _ -> toResult Result
     
