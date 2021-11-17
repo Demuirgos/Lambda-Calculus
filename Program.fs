@@ -10,10 +10,9 @@ let REPL args =
         Console.OutputEncoding <- Text.Encoding.Unicode
         let prefix = "λ >"
         let read =  function
-                    | Terminal   -> Console.ReadLine >> sprintf "%s"
+                    | Terminal   -> Console.ReadLine 
                     | File(path) -> fun () -> [yield! File.ReadLines(path)]
                                               |> String.concat "\n"
-                                              |> sprintf "%s"
         let eval = transpile >> interpret
         let print= 
             function 
