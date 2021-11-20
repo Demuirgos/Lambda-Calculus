@@ -5,6 +5,7 @@ module Abstractor
     type Statement = 
         | Value             of int
         | Identifier        of string 
+        | YComb             of Statement
         | Bind              of Statement * Statement * Statement 
         | Function          of Statement list * Statement 
         | Application       of Statement * Statement list
@@ -20,9 +21,9 @@ module Abstractor
     let parseExpr = 
         let rec parseLet =
             Parser {
-                let consumeLet = "let" |> Seq.toList |> allOf
+                let consumeLet = "let"|> Seq.toList |> allOf
                 let consumeIn  = "in" |> Seq.toList |> allOf
-                let consumeEq  = expect '='
+                let consumeEq  = ":=" |> Seq.toList |> allOf
                 let binds = parseExpression 
                 return! consumeLet >>. pSpaces >>. parseIdentifier .>> pSpaces .>> consumeEq .>> pSpaces .>>. binds
                                   .>>  pSpaces .>> consumeIn  .>> pSpaces .>>. binds
@@ -37,13 +38,16 @@ module Abstractor
             } <?> "Value" |>> (List.map string >> List.toSeq >> String.concat "" >> int >> Value)
         and parseFunction  = 
             Parser {
+                let pRec   = option ("rec" |> Seq.toList |> allOf)
                 let pArrow = "=>" |> Seq.toList |> allOf
                 let pArgs = many 1 parseIdentifier 
                 let mParams =  ','  |> expect >>. pSpaces
                                     |> separate1By pArgs
                                     |> betweenC ('(',')') 
-                return! mParams .>> pSpaces .>> pArrow .>> pSpaces .>>. parseExpression
-            } <?> "Function" |>> (fun (args, value) -> (List.concat args, value) |> Function)
+                return! pRec.>> pSpaces.>>. mParams .>> pSpaces .>> pArrow .>> pSpaces .>>. parseExpression
+            } <?> "Function" |>> (fun ((Y, args), value) -> match Y with 
+                                                            | None   -> (List.concat args, value) |> Function
+                                                            | Some _ -> (List.concat args, value) |> Function |> YComb)
         and parseOperation  = 
             Parser {
                 let pArgs=  ','  |> expect >>. pSpaces
@@ -101,6 +105,7 @@ module Abstractor
                         | h::t -> wrap (sprintf "(%s %s)" op (emitLambda h)) t
                     sprintf "%s" (wrap operation args)
                 | Identifier(name) -> name
+                | YComb(Function(_) as f) -> sprintf "((\\g.(\\y.g (y y)) (\\y.g (y y))) %s)" (emitLambda f)
                 | Mathematic(lhs, op, rhs) ->
                     match op  with 
                     | Add -> sprintf "\\g.\\v.((%s g) ((%s g) v))" (emitLambda lhs) (emitLambda rhs)
@@ -108,7 +113,7 @@ module Abstractor
                     | Exp -> sprintf "(%s %s)" (emitLambda rhs) (emitLambda lhs)
                     | Subs | Div -> failwith "not yet implimented"
                 | Value(var) -> 
-                    let funcn, varn = [for i in 1..var -> "f"] |> String.concat "", [for i in 1..var -> "x"] |> String.concat ""
+                    let funcn, varn = "f", "x" //[for i in 1..var -> "f"] |> String.concat "", [for i in 1..var -> "x"] |> String.concat ""
                     let prefix = sprintf "\\%s.\\%s." funcn varn
                     let rec loop n = 
                         match n with 
@@ -116,6 +121,7 @@ module Abstractor
                         | 1 -> sprintf "(%s %s)" funcn (loop (n - 1))
                         | _ -> sprintf "(%s %s)" funcn (loop (n - 1))
                     prefix + (loop var)
+                | _ -> failwith "Syntax Error : AST incomprehensible"
             emitLambda program
         | Failure _ -> toResult Result
     
