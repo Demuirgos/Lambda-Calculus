@@ -1,4 +1,4 @@
 let x = 
-    let y = n in
-    let z = (m) => m in 
+    let y := n in
+    let z := (m) => m in 
     z(y) in x
