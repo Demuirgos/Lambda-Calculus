@@ -16,7 +16,7 @@ module Interpreter
     let parseExpr = 
         let rec parseAtom =
             Parser {
-                let! atom = ['a'..'z'] |> Seq.toList |> anyOf |> many 1 
+                let! atom = [yield! ['a'..'z'] ;'_'] |> Seq.toList |> anyOf |> many 1 
                 return atom
             } <?> "Atom" |>> (toString >> Atom)
         and parseApp = 
