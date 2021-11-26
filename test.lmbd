@@ -1,8 +1,8 @@
 let program := 
-    let y := 3 in
-    let z := (m) => y + m in
+    let n := 1 in
+    let f := (m, y) => y + m in
     if true then    
-        z(4)
+        f(2, 3)
     else    
         3
-in program 
+end program 
