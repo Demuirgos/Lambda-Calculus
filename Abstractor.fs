@@ -125,7 +125,7 @@ module Abstractor
                 | Identifier(name) -> name
                 | YComb(Function(_) as f) -> sprintf "((\\g.(\\y.g (y y)) (\\y.g (y y))) %s)" (emitLambda f)
                 | Branch(cond,tClause, fClause) as t -> 
-                    sprintf "(\\c.\\f.\\l.((c %s) %s) %s)" (emitLambda tClause) (emitLambda fClause) (emitLambda cond) 
+                    sprintf "(((\\c.\\h.\\l.c %s) %s) %s)" (emitLambda tClause) (emitLambda fClause) (emitLambda cond) 
                 | Mathematic(lhs, op, rhs) ->
                     match op  with 
                     | Add -> sprintf "\\g.\\v.((%s g) ((%s g) v))" (emitLambda lhs) (emitLambda rhs)
