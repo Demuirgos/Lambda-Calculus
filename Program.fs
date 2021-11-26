@@ -29,10 +29,9 @@ let REPL args =
                               | _ -> Terminal )
         loop mode prefix
     match args with 
-    | [||]       -> execute <| Terminal
-    | [|path|]   -> execute <| File(path)
-    | [|"-lmbd"
-        "true"|] -> execute <| Lambda
-    | _          -> failwith "Usage: Can Only Run 1 File at a time"
+    | [||]         -> execute <| Terminal
+    | [|"-lambda"|]-> execute <| Lambda
+    | [|"-path";p|]-> execute <| File(p)
+    | _            -> failwith "Usage: Can Only Run 1 File at a time"
 
 
