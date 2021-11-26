@@ -24,11 +24,13 @@ module Abstractor
     let parseExpr = 
         let rec parseLet =
             Parser {
-                let consumeLet = "let"|> Seq.toList |> allOf
-                let consumeIn  = "in" |> Seq.toList |> allOf
-                let consumeEq  = ":=" |> Seq.toList |> allOf
+                let consumeLet = "let" |> Seq.toList |> allOf
+                let consumeIn  = "in"  |> Seq.toList |> allOf
+                let consumeEnd = "end" |> Seq.toList |> allOf
+                let consumeEq  = ":="  |> Seq.toList |> allOf
+                let consumeEndOrIn = consumeEnd <|> consumeIn
                 return! consumeLet >>. pSpaces >>. parseIdentifier .>> pSpaces .>> consumeEq .>> pSpaces .>>. parseExpression
-                                  .>>  pSpaces .>> consumeIn  .>> pSpaces .>>. parseExpression
+                                  .>>  pSpaces .>> consumeEndOrIn  .>> pSpaces .>>. parseExpression
             } <?> "Binder" |>> (fun ((a,b),c) -> (a,b,c) |> Bind)
         and parseBrancher =
             Parser {
@@ -123,30 +125,29 @@ module Abstractor
                         | h::t -> wrap (sprintf "(%s %s)" op (emitLambda h)) t
                     sprintf "%s" (wrap operation args)
                 | Identifier(name) -> name
-                | YComb(Function(_) as f) -> sprintf "((\\g.(\\y.g (y y)) (\\y.g (y y))) %s)" (emitLambda f)
+                | YComb(Function(_) as f) -> sprintf "((_g.(\\_y._g (_y _y)) (\\_y._g (_y _y))) %s)" (emitLambda f)
                 | Branch(cond,tClause, fClause) as t -> 
-                    sprintf "(\\c.\\f.\\l.((c %s) %s) %s)" (emitLambda tClause) (emitLambda fClause) (emitLambda cond) 
+                    sprintf "(((\\_c.\\_h.\\_l._c %s) %s) %s)" (emitLambda tClause) (emitLambda fClause) (emitLambda cond) 
                 | Mathematic(lhs, op, rhs) ->
                     match op  with 
-                    | Add -> sprintf "\\g.\\v.((%s g) ((%s g) v))" (emitLambda lhs) (emitLambda rhs)
-                    | Mult-> sprintf "\\g.\\v.((%s (%s g)) v)" (emitLambda lhs) (emitLambda rhs)
+                    | Add -> sprintf "\\_g.\\_v.((%s _g) ((%s _g) _v))" (emitLambda lhs) (emitLambda rhs)
+                    | Mult-> sprintf "\\_g.\\_v.((%s (%s _g)) _v)" (emitLambda lhs) (emitLambda rhs)
                     | Exp -> sprintf "(%s %s)" (emitLambda rhs) (emitLambda lhs)
-                    | And -> sprintf "((\\p.\\q.((p q) \\a.\\b.b) %s) %s)" (emitLambda lhs) (emitLambda rhs)
-                    | Or  -> sprintf "((\\p.\\q.((p \\a.\\b.a) q) %s) %s)" (emitLambda lhs) (emitLambda rhs)
+                    | And -> sprintf "((\\_p.\\_q.((_p _q) %s) %s) %s)" (emitLambda (Value False)) (emitLambda lhs) (emitLambda rhs)
+                    | Or  -> sprintf "((\\_p.\\_q.((_p %s) _q) %s) %s)" (emitLambda (Value False)) (emitLambda lhs) (emitLambda rhs)
                     | Subs | Div -> failwith "not yet implimented"
                 | Value(var) -> 
                     match var with 
-                    | True -> "\\a.\\b.a"
-                    | False -> "\\a.\\b.b"
+                    | True -> "\\_a.\\_b._a"
+                    | False -> "\\_a.\\_b._b"
                     | Variable(var) ->
-                        let funcn, varn = "f", "x" //[for i in 1..var -> "f"] |> String.concat "", [for i in 1..var -> "x"] |> String.concat ""
-                        let prefix = sprintf "\\%s.\\%s." funcn varn
+                        let funcn, varn = "_v", "_x" //[for i in 1..var -> "f"] |> String.concat "", [for i in 1..var -> "x"] |> String.concat ""
                         let rec loop n = 
                             match n with 
                             | 0 -> sprintf "%s" varn
                             | 1 -> sprintf "(%s %s)" funcn (loop (n - 1))
                             | _ -> sprintf "(%s %s)" funcn (loop (n - 1))
-                        prefix + (loop var)
+                        sprintf "\\%s.\\%s.%s" funcn varn (loop var)
                 | _ -> failwith "Syntax Error : AST incomprehensible"
             emitLambda program
         | Failure _ -> toResult Result

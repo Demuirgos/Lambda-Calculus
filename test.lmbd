@@ -1,4 +1,8 @@
-let x = 
-    let y := n in
-    let z := (m) => m in 
-    z(y) in x
+let program := 
+    let n := 1 in
+    let f := (m, y) => y + m in
+    if true then    
+        f(2, 3)
+    else    
+        3
+end program 
