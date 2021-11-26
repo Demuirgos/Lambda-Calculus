@@ -13,13 +13,13 @@ module Abstractor
         | Branch            of Statement * Statement * Statement
     and Literal =
         | True | False | Variable of int
-    and Operation   =   Add | Subs | Div | Mult | Exp | Or | And //| Not | Xor
+    and Operation   =   Add | Subs | Div | Mult | Exp | Or | And | Eq | Lt | Not | Xor | Gt
                         static member toOp token =
                             match token with 
-                            | "*" -> Mult | "/" -> Div
-                            | "-" -> Subs | "^" -> Exp 
-                            | "&" -> And  | "|" -> Or
-                            | "+" -> Add  | _ -> failwith "Failed Parsing"
+                            | "*" -> Mult | "/" -> Div | "-" -> Subs | "^" -> Exp | "+" -> Add
+                            | "&" -> And  | "|" -> Or | "~" -> Not | "!" -> Xor 
+                            | "=" -> Eq   | "<" -> Lt | ">" -> Gt
+                            | _ -> failwith "Failed Parsing"
     #nowarn "40"
     let parseExpr = 
         let rec parseLet =
@@ -57,7 +57,7 @@ module Abstractor
                                                                                     | _ as i -> i |> int |> Variable |> Value)
         and parseFunction  = 
             Parser {
-                let pRec   = option ("rec" |> Seq.toList |> allOf)
+                let pRec   = option ("Y" |> Seq.toList |> allOf)
                 let pArrow = "=>" |> Seq.toList |> allOf
                 let pArgs = many 1 parseIdentifier 
                 let mParams =  ','  |> expect >>. pSpaces
@@ -125,17 +125,21 @@ module Abstractor
                         | h::t -> wrap (sprintf "(%s %s)" op (emitLambda h)) t
                     sprintf "%s" (wrap operation args)
                 | Identifier(name) -> name
-                | YComb(Function(_) as f) -> sprintf "((_g.(\\_y._g (_y _y)) (\\_y._g (_y _y))) %s)" (emitLambda f)
+                | YComb(Function(_) as f) -> 
+                    let printfY = sprintf "(\\_g.(\\_y.(_g (_y _y)) \\_y.(_g (_y _y))) %s)"
+                    printfY (emitLambda f)
                 | Branch(cond,tClause, fClause) as t -> 
-                    sprintf "(((\\_c.\\_h.\\_l._c %s) %s) %s)" (emitLambda tClause) (emitLambda fClause) (emitLambda cond) 
+                    let IfThenElse = sprintf "(\\_c.(\\_h.(\\_l.((_c _h) _l) %s) %s) %s)"
+                    IfThenElse (emitLambda fClause) (emitLambda tClause) (emitLambda cond) 
                 | Mathematic(lhs, op, rhs) ->
+                    let isZero = sprintf "(\\_v.((v \\_x.%s) %s) %s)" (emitLambda (Value False)) (emitLambda (Value True))
                     match op  with 
                     | Add -> sprintf "\\_g.\\_v.((%s _g) ((%s _g) _v))" (emitLambda lhs) (emitLambda rhs)
                     | Mult-> sprintf "\\_g.\\_v.((%s (%s _g)) _v)" (emitLambda lhs) (emitLambda rhs)
                     | Exp -> sprintf "(%s %s)" (emitLambda rhs) (emitLambda lhs)
                     | And -> sprintf "((\\_p.\\_q.((_p _q) %s) %s) %s)" (emitLambda (Value False)) (emitLambda lhs) (emitLambda rhs)
-                    | Or  -> sprintf "((\\_p.\\_q.((_p %s) _q) %s) %s)" (emitLambda (Value False)) (emitLambda lhs) (emitLambda rhs)
-                    | Subs | Div -> failwith "not yet implimented"
+                    | Or  -> sprintf "((\\_p.\\_q.((_p %s) _q) %s) %s)" (emitLambda (Value True)) (emitLambda lhs) (emitLambda rhs)
+                    | _ -> failwith "not yet implimented"
                 | Value(var) -> 
                     match var with 
                     | True -> "\\_a.\\_b._a"
@@ -145,7 +149,6 @@ module Abstractor
                         let rec loop n = 
                             match n with 
                             | 0 -> sprintf "%s" varn
-                            | 1 -> sprintf "(%s %s)" funcn (loop (n - 1))
                             | _ -> sprintf "(%s %s)" funcn (loop (n - 1))
                         sprintf "\\%s.\\%s.%s" funcn varn (loop var)
                 | _ -> failwith "Syntax Error : AST incomprehensible"
