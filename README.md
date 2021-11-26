@@ -9,7 +9,9 @@
 		
 # MLAbstraction Language Grammar :
 	 Expression := 
-		| Bind(Name, Expression)   : "let x = y in x" 
-		| Func([Name], Expression) : "let f = (y,w) => w in f"
-		| Oper(Func, [Expression]) : "let x = f(y,z) in x"
+		| Bind(Name, Expression)   : "let x := y in x" 
+		| Func([Name], Expression) : "(y,w) => w"
+		| Oper(Func, [Expression]) : "f(y,z)"
+		| Branch(cnd, tCnt, fCnt)  : "if e then g else h"
 		| Identifier 		   : [a-z]+
+		| Literal 		   : true | false | [0..9]+
