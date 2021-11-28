@@ -76,7 +76,7 @@ module Abstractor
         and parseBinary  = 
             Parser {
                 let operand = parseValue <|> parseUnary <|> parseIdentifier <|> parseOperation
-                let binOper = ['+';'-';'/';'*';'^';'|';'&';'=';'<';'>'] |> anyOf |>> (string >> Operation.toOp)
+                let binOper = ['+';'-';'/';'*';'^';'|';'&';'=';'<';'>';'!'] |> anyOf |>> (string >> Operation.toOp)
                 return! operand .>>  pSpaces .>>. binOper .>> pSpaces .>>. operand
             } <?> "Binary Term" |>> (fun ((lhs,op),rhs) -> (lhs,op,rhs) |> Binary)
         and parseExpression = 
@@ -121,7 +121,7 @@ module Abstractor
                     let rec wrap op = function
                         | [] -> op
                         | h::t -> wrap (sprintf "(%s %s)" op (emitLambda h)) t
-                    sprintf "%s" (wrap operation args)
+                    wrap operation args
                 | Identifier(name) -> name
                 | Unary(Op, rhs) -> 
                     match Op with 
@@ -147,7 +147,7 @@ module Abstractor
                     | Subs-> sprintf "((\\_g.\\_v.(_v %s) %s) %s)" (predec "_g") (emitLambda lhs) (emitLambda rhs)
                     | Lt  -> isZero (emitLambda (Binary(lhs, Subs, rhs))) | Gt  -> emitLambda (Binary(rhs, Lt, lhs))
                     | Eq  -> emitLambda (Binary(Binary(lhs, Lt, rhs), And, Binary(lhs, Gt, rhs)))
-                    | _ -> failwith "not yet implimented"
+                    | Xor -> sprintf "((\\_g.\\_v.((_g %s) _v) %s) %s)" (emitLambda (Unary(Not, Identifier("_v")))) (emitLambda lhs) (emitLambda rhs)
                 | Value(var) -> 
                     match var with 
                     | True -> "\\_a.\\_b._a"
