@@ -77,7 +77,7 @@ module Abstractor
         and parseBinary  = 
             Parser {
                 let operand = parseValue <|> parseIdentifier <|> parseOperation
-                let binOper = ['+';'-';'/';'*';'^';'|';'&'] |> anyOf |>> (string >> Operation.toOp)
+                let binOper = ['+';'-';'/';'*';'^';'|';'&';'=';'<';'>'] |> anyOf |>> (string >> Operation.toOp)
                 return! operand .>>  pSpaces .>>. binOper .>> pSpaces .>>. operand
             } <?> "Binary Term" |>> (fun ((lhs,op),rhs) -> (lhs,op,rhs) |> Mathematic)
         and parseExpression = 
@@ -132,13 +132,17 @@ module Abstractor
                     let IfThenElse = sprintf "(\\_c.(\\_h.(\\_l.((_c _h) _l) %s) %s) %s)"
                     IfThenElse (emitLambda fClause) (emitLambda tClause) (emitLambda cond) 
                 | Mathematic(lhs, op, rhs) ->
-                    let isZero = sprintf "(\\_v.((v \\_x.%s) %s) %s)" (emitLambda (Value False)) (emitLambda (Value True))
+                    let isZero = sprintf "(\\_z.((_z \\_w.%s) %s) %s)" (emitLambda (Value False)) (emitLambda (Value True))
+                    let predec = sprintf "(\\_d.\\_h.\\_w.(((_d \\_g.\\_h.(_h (_g _h))) \\_u._w) \\_u._u) %s)"
                     match op  with 
                     | Add -> sprintf "\\_g.\\_v.((%s _g) ((%s _g) _v))" (emitLambda lhs) (emitLambda rhs)
                     | Mult-> sprintf "\\_g.\\_v.((%s (%s _g)) _v)" (emitLambda lhs) (emitLambda rhs)
                     | Exp -> sprintf "(%s %s)" (emitLambda rhs) (emitLambda lhs)
-                    | And -> sprintf "((\\_p.\\_q.((_p _q) %s) %s) %s)" (emitLambda (Value False)) (emitLambda lhs) (emitLambda rhs)
-                    | Or  -> sprintf "((\\_p.\\_q.((_p %s) _q) %s) %s)" (emitLambda (Value True)) (emitLambda lhs) (emitLambda rhs)
+                    | And -> sprintf "((\\_g.\\_v.((_g _v) %s) %s) %s)" (emitLambda (Value False)) (emitLambda lhs) (emitLambda rhs)
+                    | Or  -> sprintf "((\\_g.\\_v.((_g %s) _v) %s) %s)" (emitLambda (Value True)) (emitLambda lhs) (emitLambda rhs)
+                    | Subs-> sprintf "((\\_g.\\_v.(_v %s) %s) %s)" (predec "_g") (emitLambda lhs) (emitLambda rhs)
+                    | Lt  -> isZero (emitLambda (Mathematic(lhs, Subs, rhs))) | Gt  -> emitLambda (Mathematic(rhs, Lt, lhs))
+                    | Eq  -> emitLambda (Mathematic(Mathematic(lhs, Lt, rhs), And, Mathematic(lhs, Gt, rhs)))
                     | _ -> failwith "not yet implimented"
                 | Value(var) -> 
                     match var with 
