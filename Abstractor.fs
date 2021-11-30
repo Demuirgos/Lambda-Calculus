@@ -106,62 +106,66 @@ module Abstractor
         let Result = (fromStr input, parseExpr) 
                      ||> run
         match Result with
-        | Success (program,_) -> 
+        | Success (program,r) -> 
+            printfn "%A" program
             let rec emitLambda= function
                 | Bind(name, expr, value) ->
-                    sprintf "(\\%s.%s %s)" (emitLambda name) (emitLambda value) (emitLambda  expr)
-                | Function(parameters, expr) as f->
-                    let emit = function | Function([param], expr) -> sprintf "\\%s.%s" (emitLambda param) (emitLambda expr)
+                    Applicative(Lambda(emitLambda name, emitLambda value), emitLambda expr)
+                | Function(parameters, _) as f->
+                    let emit = function | Function([param], expr) -> Lambda(emitLambda param, emitLambda expr)
                                         | _ -> failwithf "%A is not a lambda, transpiling failed" (nameof f)
                     match parameters with 
                     | [] | [_] -> emit f
                     | _ -> emit (curry f)
                 | Application(expr, args) ->
-                    let operation = sprintf "%s" (emitLambda expr)
+                    let operation = emitLambda expr
                     let rec wrap op = function
                         | [] -> op
-                        | h::t -> wrap (sprintf "(%s %s)" op (emitLambda h)) t
+                        | h::t -> wrap (Applicative(op, (emitLambda h))) t
                     wrap operation args
-                | Identifier(name) -> name
+                | Identifier(name) -> Atom name
                 | Unary(Op, rhs) -> 
                     match Op with 
-                    | Not -> sprintf "(\\_g.((_g %s) %s) %s)" (emitLambda (Value False)) (emitLambda (Value True)) (emitLambda rhs)
+                    | Not -> Applicative(Applicative(emitLambda rhs, emitLambda (Value False)), emitLambda (Value True))
                     | YComb ->
-                        let printfY = sprintf "(\\_g.(\\_y.(_g (_y _y)) \\_y.(_g (_y _y))) %s)"
+                        let Y = "(\\_g.(\\_y.(_g (_y _y)) \\_y.(_g (_y _y)))" |> parse |> interpret 
+                                                                                    |> function Ok(func) -> func
                         match rhs with
-                        | Function _ as f -> printfY (emitLambda f)
+                        | Function _ as f -> Applicative(Y, (emitLambda f))
                         | _ -> failwith "YComb only applies to Lambdas/Functions"
-                    | _ -> failwith "Unary operator not supported"
+                    | _ -> failwith "Unary operator not supported" 
                 | Branch(cond,tClause, fClause) as t -> 
-                    let IfThenElse = sprintf "(\\_c.(\\_h.(\\_l.((_c _h) _l) %s) %s) %s)"
-                    IfThenElse (emitLambda fClause) (emitLambda tClause) (emitLambda cond) 
+                    Applicative (Applicative(emitLambda cond, emitLambda tClause), emitLambda fClause)
                 | Binary(lhs, op, rhs) ->
-                    let isZero = sprintf "(\\_z.((_z \\_w.%s) %s) %s)" (emitLambda (Value False)) (emitLambda (Value True))
-                    let predec = sprintf "(\\_d.\\_h.\\_w.(((_d \\_g.\\_h.(_h (_g _h))) \\_u._w) \\_u._u) %s)"
+                    let isZero arg = Applicative(Applicative(arg,Lambda(Atom "_w", emitLambda (Value False))), emitLambda (Value True))
+                    let predec = sprintf "\\_d.\\_h.\\_w.(((_d \\_g.\\_h.(_h (_g _h))) \\_u._w) \\_u._u)" |> parse |> interpret 
+                                                                                                          |> function Ok(program) -> program
                     match op  with 
-                    | Add -> sprintf "\\_g.\\_v.((%s _g) ((%s _g) _v))" (emitLambda lhs) (emitLambda rhs)
-                    | Mult-> sprintf "\\_g.\\_v.((%s (%s _g)) _v)" (emitLambda lhs) (emitLambda rhs)
-                    | Exp -> sprintf "(%s %s)" (emitLambda rhs) (emitLambda lhs)
-                    | And -> sprintf "((\\_g.\\_v.((_g _v) %s) %s) %s)" (emitLambda (Value False)) (emitLambda lhs) (emitLambda rhs)
-                    | Or  -> sprintf "((\\_g.\\_v.((_g %s) _v) %s) %s)" (emitLambda (Value True)) (emitLambda lhs) (emitLambda rhs)
-                    | Subs-> sprintf "((\\_g.\\_v.(_v %s) %s) %s)" (predec "_g") (emitLambda lhs) (emitLambda rhs)
+                    | Add -> Lambda(Atom "_g", Lambda(Atom "_v", Applicative(Applicative(emitLambda lhs, Atom "_g"), Applicative(Applicative(emitLambda rhs, Atom "_g"), Atom "_v"))))
+                    | Mult-> Lambda(Atom "_g", Lambda(Atom "_v", Applicative(Applicative(emitLambda lhs, Applicative(emitLambda rhs, Atom "_g")), Atom "_v")))
+                    | Exp -> Applicative(emitLambda rhs, emitLambda lhs)
+                    | And -> Applicative(Applicative(emitLambda rhs, emitLambda lhs), emitLambda (Value False))
+                    | Or  -> Applicative(Applicative(emitLambda rhs, emitLambda (Value False)), emitLambda lhs)
+                    | Subs-> Applicative(emitLambda lhs, Applicative(predec, emitLambda rhs))
                     | Lt  -> isZero (emitLambda (Binary(lhs, Subs, rhs))) | Gt  -> emitLambda (Binary(rhs, Lt, lhs))
                     | Eq  -> emitLambda (Binary(Binary(lhs, Lt, rhs), And, Binary(lhs, Gt, rhs)))
-                    | Xor -> sprintf "((\\_g.\\_v.((_g %s) _v) %s) %s)" (emitLambda (Unary(Not, Identifier("_v")))) (emitLambda lhs) (emitLambda rhs)
-                | Value(var) -> 
+                    | Xor -> Applicative(Applicative(emitLambda rhs, emitLambda (Unary(Not, lhs))), emitLambda rhs)
+                 | Value(var) -> 
                     match var with 
-                    | True -> "\\_a.\\_b._a"
-                    | False -> "\\_a.\\_b._b"
+                    | True -> Lambda(Atom "_a", Lambda(Atom "_b", Atom "_a"))
+                    | False -> Lambda(Atom "_a", Lambda(Atom "_b", Atom "_b"))
                     | Variable(var) ->
-                        let funcn, varn = "_v", "_x" //[for i in 1..var -> "f"] |> String.concat "", [for i in 1..var -> "x"] |> String.concat ""
+                        let funcn, varn = "_v", "_g" //[for i in 1..var -> "f"] |> String.concat "", [for i in 1..var -> "x"] |> String.concat ""
                         let rec loop n = 
                             match n with 
-                            | 0 -> sprintf "%s" varn
-                            | _ -> sprintf "(%s %s)" funcn (loop (n - 1))
-                        sprintf "\\%s.\\%s.%s" funcn varn (loop var)
+                            | 0 -> Atom varn
+                            | _ -> Applicative(Atom funcn, (loop (n - 1)))
+                        Lambda(Atom funcn, Lambda(Atom varn, loop var))
                 | _ -> failwith "Syntax Error : AST incomprehensible"
-            emitLambda program
-        | Failure _ -> toResult Result
+            let result = emitLambda program
+            printfn "%A" result
+            Success (result, r)
+        | Failure _ -> failwith "Syntax Error : Syntax incomprehensible"
     
     let rec uncompile =
         function 
