@@ -7,9 +7,6 @@ module Interpreter
         | Atom of string
         | Applicative of Expression * Expression
         | Lambda of Expression * Expression 
-    and 'a Output = 
-        | Value of 'a
-        | Failed of string
     and Envirement = list<string * Expression>
 
     
@@ -70,10 +67,10 @@ module Interpreter
                     | Lambda        (arg, body)  -> Lambda      (arg,convert' body)
                 match occurs id lambda with 
                 | (true,_) -> 
-                   Failed (sprintf "New name '%A' already appears in %A" id lambda)
+                   Error (sprintf "New name '%A' already appears in %A" id lambda)
                 | _ -> match lambda with 
-                       | Lambda (Atom(arg),body) -> Lambda (Atom(id), convert arg id body) |> Value 
-                       | _ -> Failed (sprintf "α-conversion not supported for %A" lambda)
+                       | Lambda (Atom(arg),body) -> Lambda (Atom(id), convert arg id body) |> Ok 
+                       | _ -> Error (sprintf "α-conversion not supported for %A" lambda)
             let (/>) = ``α Convert``
 
             let rec ``β-redex`` =
@@ -95,14 +92,14 @@ module Interpreter
                     let substitute' = substitute arg param  
                     match body with
                     | Atom id ->
-                        if id = param then Value arg
-                        else Value body 
+                        if id = param then Ok arg
+                        else Ok body 
                     | Applicative(fn, arg) -> 
                         match substitute' fn, substitute' arg  with 
-                        | Value(fn'), Value(arg') ->  Value (Applicative(fn',arg'))
-                        | (Failed(msg) ,_) | (_, Failed (msg)) -> Failed msg 
+                        | Ok(fn'), Ok(arg') ->  Ok (Applicative(fn',arg'))
+                        | (Error(msg) ,_) | (_, Error (msg)) -> Error msg 
                     | Lambda(Atom(local), body') -> 
-                        if local = param then Value body 
+                        if local = param then Ok body 
                         else 
                             let occurence = (local, arg)
                                             ||> occurs
@@ -114,20 +111,20 @@ module Interpreter
                                              |> Seq.tryFind (not << localVars.Contains)
                                              |> Option.map (fun repl -> 
                                                  match repl /> body with
-                                                 | Value v -> substitute' <| v 
-                                                 | Failed _ as error ->  error )
+                                                 | Ok v -> substitute' <| v 
+                                                 | Error _ as error ->  error )
                                 match result with 
                                 | Some v -> v
-                                | _ -> Failed "Exhausted variable names for α-conversion"
+                                | _ -> Error "Exhausted variable names for α-conversion"
                             else
                                 match substitute' body' with 
-                                | Value body'' -> Lambda (Atom(local), body'') |> Value
-                                | Failed _ as error -> error
-                    | _ -> Failed "β-redex : Subtitution Failed"  
+                                | Ok body'' -> Lambda (Atom(local), body'') |> Ok
+                                | Error _ as error -> error
+                    | _ -> Error "β-redex : Subtitution Failed"  
                 function
                 | Applicative (Lambda (Atom(param), body), arg) ->
                     substitute arg param body
-                | expression -> Failed <| sprintf "%A is not a β-redex" expression
+                | expression -> Error <| sprintf "%A is not a β-redex" expression
             let (</) () expr= ``β-redex`` expr
 
             let evaluate expression = 
@@ -141,41 +138,41 @@ module Interpreter
                         isBetaRedex body
                 let rec reduce expr = 
                     match expr with 
-                    | Atom _ -> Value expr
+                    | Atom _ -> Ok expr
                     | Applicative (Lambda(_), _) -> 
                         () </ expr 
                     | Lambda (arg, body) ->
                         match reduce body with 
-                        | Value body' -> 
-                            Lambda (arg, body') |> Value 
+                        | Ok body' -> 
+                            Lambda (arg, body') |> Ok 
                         | error -> error
                     | Applicative(lhs, rhs) ->
                         let lhsc,rhsc = isBetaRedex lhs,isBetaRedex rhs 
                         match lhsc,rhsc with 
                         | (true, _) -> 
                             match reduce lhs with 
-                            | Value v ->  Applicative (v, rhs) |> Value
+                            | Ok v ->  Applicative (v, rhs) |> Ok
                             | error -> error
                         | (_, true) -> 
                             match reduce rhs with 
-                            | Value v ->  Applicative (lhs, v) |> Value
+                            | Ok v ->  Applicative (lhs, v) |> Ok
                             | error -> error
-                        | _ -> Value expr
+                        | _ -> Ok expr
                 let rec loop expr =
                     match isBetaRedex expr with 
                     | true ->   expr 
                                 |>  reduce 
                                 |>  function 
-                                    | Value expr' -> loop expr'
+                                    | Ok expr' -> loop expr'
                                     | error -> error
-                    | _ -> Value expr
+                    | _ -> Ok expr
                 loop expression                          
             evaluate term
-        | error -> error |> toResult |> Failed  
+        | error -> error |> toResult |> Error  
 
     let toString expr = 
         match expr with 
-        | Value v ->
+        | Ok v ->
             let rec toString' term = 
                 match term with 
                 | Lambda(arg,body) -> 
@@ -185,10 +182,7 @@ module Interpreter
                 | Atom(v) -> sprintf "%s" v
                 | Applicative(lhs,rhs) -> sprintf "(%s %s)" (toString' lhs) (toString' rhs)
             toString' v
-        | Failed e -> e
-        
-    let interpret input = 
-        (fromStr input, parseExpr .>> eof) 
-            ||> run 
-             |> evalExpr
-             |> toString
+        | Error e -> e
+    
+    let parse txt = (fromStr txt, parseExpr .>> eof) ||> run 
+    let interpret (code : Result<Expression * State>) = code |> evalExpr

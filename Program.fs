@@ -15,8 +15,8 @@ let REPL args =
                     | _ -> Console.ReadLine 
         let eval mode = 
             match mode with 
-            | Lambda -> interpret
-            | _ -> transpile >> interpret
+            | Lambda -> parse >> interpret >> toString
+            | _ ->  transpile >> interpret >> toString
         let print= 
             function 
             | input ->  printfn "%s" input
