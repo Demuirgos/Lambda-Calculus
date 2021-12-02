@@ -107,7 +107,6 @@ module Abstractor
                      ||> run
         match Result with
         | Success (program,r) -> 
-            printfn "%A" program
             let toSyntaxTree = parse     >> (function Success(code,_) -> code) >> 
                                interpret >> (function Ok(program)     -> program)
             let rec emitLambda= function
@@ -160,7 +159,6 @@ module Abstractor
                             | _ -> Applicative(Atom funcn, (loop (n - 1)))
                         Lambda(Atom funcn, Lambda(Atom varn, loop var))
             let result = emitLambda program
-            printfn "%A" result
             Success (result, r)
         | Failure _ -> failwith "Syntax Error : Syntax incomprehensible"
     
