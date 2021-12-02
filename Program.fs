@@ -14,9 +14,12 @@ let REPL args =
                                               |> String.concat "\n"
                     | _ -> Console.ReadLine 
         let eval mode = 
-            match mode with 
-            | Lambda -> parse >> interpret >> toString
-            | _ ->  transpile >> interpret >> toString
+            let operation = match mode with 
+                            | Lambda -> parse
+                            | _ ->  transpile 
+            operation >> function 
+                | Success(code,_) -> code |> (interpret >> toString)
+                | error-> error |> toResult
         let print= 
             function 
             | input ->  printfn "%s" input

@@ -108,6 +108,8 @@ module Abstractor
         match Result with
         | Success (program,r) -> 
             printfn "%A" program
+            let toSyntaxTree = parse     >> (function Success(code,_) -> code) >> 
+                               interpret >> (function Ok(program)     -> program)
             let rec emitLambda= function
                 | Bind(name, expr, value) ->
                     Applicative(Lambda(emitLambda name, emitLambda value), emitLambda expr)
@@ -128,40 +130,35 @@ module Abstractor
                     match Op with 
                     | Not -> Applicative(Applicative(emitLambda rhs, emitLambda (Value False)), emitLambda (Value True))
                     | YComb ->
-                        let Y = "(\\_g.(\\_y.(_g (_y _y)) \\_y.(_g (_y _y)))" |> parse |> interpret 
-                                                                                    |> function Ok(func) -> func
-                        match rhs with
-                        | Function _ as f -> Applicative(Y, (emitLambda f))
-                        | _ -> failwith "YComb only applies to Lambdas/Functions"
+                        let Y = "(\\_g.(\\_y.(_g (_y _y)) \\_y.(_g (_y _y)))" |> toSyntaxTree
+                        Applicative(Y, (emitLambda rhs))
                     | _ -> failwith "Unary operator not supported" 
                 | Branch(cond,tClause, fClause) as t -> 
                     Applicative (Applicative(emitLambda cond, emitLambda tClause), emitLambda fClause)
                 | Binary(lhs, op, rhs) ->
                     let isZero arg = Applicative(Applicative(arg,Lambda(Atom "_w", emitLambda (Value False))), emitLambda (Value True))
-                    let predec = sprintf "\\_d.\\_h.\\_w.(((_d \\_g.\\_h.(_h (_g _h))) \\_u._w) \\_u._u)" |> parse |> interpret 
-                                                                                                          |> function Ok(program) -> program
+                    let predec = "\\_n.\\_f.\\_x.(((_n \\_g.\\_h.(_h (_g _f))) \\_u._x) \\_u._u)" |> toSyntaxTree
                     match op  with 
                     | Add -> Lambda(Atom "_g", Lambda(Atom "_v", Applicative(Applicative(emitLambda lhs, Atom "_g"), Applicative(Applicative(emitLambda rhs, Atom "_g"), Atom "_v"))))
                     | Mult-> Lambda(Atom "_g", Lambda(Atom "_v", Applicative(Applicative(emitLambda lhs, Applicative(emitLambda rhs, Atom "_g")), Atom "_v")))
                     | Exp -> Applicative(emitLambda rhs, emitLambda lhs)
                     | And -> Applicative(Applicative(emitLambda rhs, emitLambda lhs), emitLambda (Value False))
                     | Or  -> Applicative(Applicative(emitLambda rhs, emitLambda (Value False)), emitLambda lhs)
-                    | Subs-> Applicative(emitLambda lhs, Applicative(predec, emitLambda rhs))
+                    | Subs-> Applicative(Applicative(emitLambda rhs, predec), emitLambda lhs)
                     | Lt  -> isZero (emitLambda (Binary(lhs, Subs, rhs))) | Gt  -> emitLambda (Binary(rhs, Lt, lhs))
                     | Eq  -> emitLambda (Binary(Binary(lhs, Lt, rhs), And, Binary(lhs, Gt, rhs)))
-                    | Xor -> Applicative(Applicative(emitLambda rhs, emitLambda (Unary(Not, lhs))), emitLambda rhs)
+                    | Xor -> Applicative(Applicative(emitLambda rhs, emitLambda (Unary(Not, lhs))), emitLambda lhs)
                  | Value(var) -> 
                     match var with 
                     | True -> Lambda(Atom "_a", Lambda(Atom "_b", Atom "_a"))
                     | False -> Lambda(Atom "_a", Lambda(Atom "_b", Atom "_b"))
                     | Variable(var) ->
-                        let funcn, varn = "_v", "_g" //[for i in 1..var -> "f"] |> String.concat "", [for i in 1..var -> "x"] |> String.concat ""
+                        let funcn, varn = "_a", "_b" //[for i in 1..var -> "f"] |> String.concat "", [for i in 1..var -> "x"] |> String.concat ""
                         let rec loop n = 
                             match n with 
                             | 0 -> Atom varn
                             | _ -> Applicative(Atom funcn, (loop (n - 1)))
                         Lambda(Atom funcn, Lambda(Atom varn, loop var))
-                | _ -> failwith "Syntax Error : AST incomprehensible"
             let result = emitLambda program
             printfn "%A" result
             Success (result, r)
