@@ -36,7 +36,7 @@ module Abstractor
                 return! consumeIf   >>. pSpaces  >>. pCondition      .>> pSpaces 
                     .>> consumeThen .>> pSpaces .>>. parseExpression .>> pSpaces 
                     .>> consumeElse .>> pSpaces .>>. parseExpression
-            } <?> "Binder" |>> (fun ((c,t),f) -> (c,t,f) |> Branch)
+            } <?> "Flow" |>> (fun ((c,t),f) -> (c,t,f) |> Branch)
         and parseIdentifier = 
             ['a'..'z'] |> Seq.toList |> anyOf |> many 1 <?> "Identifier" |>> (toString >> Identifier)
         and parseValue =
