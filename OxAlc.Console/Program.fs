@@ -1,8 +1,9 @@
-open System
+﻿open System
 open System.IO
 open FSharp.Core
 open Interpreter
 open Abstractor
+
 type Mode = File of string | Terminal | Lambda
 [<EntryPoint>]
 let REPL args =
@@ -15,8 +16,8 @@ let REPL args =
                     | _ -> Console.ReadLine 
         let eval mode = 
             let operation = match mode with 
-                            | Lambda -> parse
-                            | _ ->  transpile 
+                            | Lambda -> Interpreter.parse
+                            | _ ->  Abstractor.transpile 
             operation >> function 
                 | Success(code,_) -> code |> (interpret >> toString)
                 | error-> error |> toResult
@@ -36,5 +37,3 @@ let REPL args =
     | [|"-lambda"|]-> execute <| Lambda
     | [|"-path";p|]-> execute <| File(p)
     | _            -> failwith "Usage: Can Only Run 1 File at a time"
-
-

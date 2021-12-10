@@ -36,7 +36,7 @@ module Abstractor
                 return! consumeIf   >>. pSpaces  >>. pCondition      .>> pSpaces 
                     .>> consumeThen .>> pSpaces .>>. parseExpression .>> pSpaces 
                     .>> consumeElse .>> pSpaces .>>. parseExpression
-            } <?> "Flow" |>> (fun ((c,t),f) -> (c,t,f) |> Branch)
+            } <?> "Binder" |>> (fun ((c,t),f) -> (c,t,f) |> Branch)
         and parseIdentifier = 
             ['a'..'z'] |> Seq.toList |> anyOf |> many 1 <?> "Identifier" |>> (toString >> Identifier)
         and parseValue =
@@ -95,6 +95,7 @@ module Abstractor
                 return expr
             } <?> "Expression" 
         parseLet true
+
     let transpile input = 
         // make this function emit lambda AST instead of parsable strings
         let rec curry =
@@ -129,7 +130,8 @@ module Abstractor
                     match Op with 
                     | Not -> Applicative(Applicative(emitLambda rhs, emitLambda (Value False)), emitLambda (Value True))
                     | YComb ->
-                        let Y = "(\\_g.(\\_y.(_g (_y _y)) \\_y.(_g (_y _y)))" |> toSyntaxTree
+                        let Y = "\\_g.(\\_y.(_g (_y _y)) \\_y.(_g (_y _y)))" |> toSyntaxTree
+                        printfn "%A" Y
                         Applicative(Y, (emitLambda rhs))
                     | _ -> failwith "Unary operator not supported" 
                 | Branch(cond,tClause, fClause) as t -> 
@@ -167,3 +169,5 @@ module Abstractor
         | Applicative(f, args) -> Application(uncompile f, [uncompile args])
         | Lambda(p, b) -> Function([uncompile p], uncompile b)
         | Atom(name) -> Identifier(name)
+
+    let parse text = Parsec.Parser.run (fromStr text) parseExpr

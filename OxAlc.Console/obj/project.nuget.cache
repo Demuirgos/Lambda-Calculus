@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "o4wP4mfLl/XuNZtsU973C03rV7bnxsJJQ+O9guKi22a9vh6niSI2zOLyV9I87kvLmBuFtX/oFqheUrqK3vMkvg==",
+  "success": true,
+  "projectFilePath": "D:\\Projects\\LambdaCalculus\\OxAlc.Console\\OxAlc.Console.fsproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Ayman\\.nuget\\packages\\fsharp.core\\6.0.1\\fsharp.core.6.0.1.nupkg.sha512"
+  ],
+  "logs": []
+}
