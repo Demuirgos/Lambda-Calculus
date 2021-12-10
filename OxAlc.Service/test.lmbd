@@ -1,8 +1,0 @@
-let program := 
-    let x := 1 in
-    let f := (m, y) => y + m in
-    if false | ~false then    
-        f(2, 3)
-    else    
-        x
-end program 
