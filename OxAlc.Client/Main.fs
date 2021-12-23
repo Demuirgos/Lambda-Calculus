@@ -43,7 +43,6 @@ type LambdaService =
 
     interface IRemoteService with
         member this.BasePath = "/Api"
-
 /// The Elmish application's update messages.
 type Message =
     | SetPage   of Page
@@ -86,15 +85,26 @@ let router = Router.infer SetPage (fun model -> model.page)
 
 type Main = Template<"wwwroot/main.html">
 
-let homePage model dispatch =
-    Main.Home().Elt()
-
 let menuItem (model: Model) (page: Page) (text: string) =
     Main.MenuItem()
         .Active(if model.page = page then "is-active" else "")
         .Url(router.Link page)
         .Text(text)
         .Elt()
+
+let MakeTextArea (model: Model) dispatch =
+    div [attr.id "input"] [Node.Text "TextEditor"]
+
+let MakeOutputArea (model: Model) dispatch =
+    div [attr.id "output"] [Node.Text "TextViewer"]
+    
+let MakeActionArea (model: Model) dispatch =
+    div [attr.id "action"] [Node.Text "ButtonViewer"]
+
+let homePage model dispatch =
+    Node.Concat [   MakeActionArea model dispatch;
+                    MakeTextArea model dispatch;
+                    MakeOutputArea model dispatch ]
 
 let view model dispatch =
     Main()

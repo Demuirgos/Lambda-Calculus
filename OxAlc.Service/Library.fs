@@ -8,13 +8,19 @@ open Abstractor
 
 type Mode = Lambda | Oxalc
 
-let Transpile = Interpreter.interpret >> sprintf "%A"
-let Interpret = Abstractor.transpile >> sprintf "%A"
-let Decompile = Interpreter.parse 
+let transpile = Abstractor.transpile >> sprintf "%A"
+
+let interpret = Interpreter.parse 
+                >> function
+                | Success (code, _) -> code |> Interpreter.interpret |> sprintf "%A"
+                | _ as error -> error |> toResult
+                
+let decompile = Interpreter.parse 
                 >> function
                 | Success (code, _) -> code |> Abstractor.uncompile |> (sprintf "%A")
                 | _ as error -> error |> toResult
-let Parse = 
+                
+let parse = 
     function
     | Lambda -> Interpreter.parse >> toResult
     | Oxalc  -> Abstractor.parse  >> toResult

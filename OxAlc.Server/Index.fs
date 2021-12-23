@@ -15,14 +15,6 @@ let page = doctypeHtml [] [
         link [attr.rel "stylesheet"; attr.href "css/index.css"]
     ]
     body [] [
-        nav [attr.classes ["navbar"; "is-dark"]; "role" => "navigation"; attr.aria "label" "main navigation"] [
-            div [attr.classes ["navbar-brand"]] [
-                a [attr.classes ["navbar-item"; "has-text-weight-bold"; "is-size-5"]; attr.href "https://fsbolero.io"] [
-                    img [attr.style "height:40px"; attr.src "https://github.com/fsbolero/website/raw/master/src/Website/img/wasm-fsharp.png"]
-                    text "  Bolero"
-                ]
-            ]
-        ]
         div [attr.id "main"] [rootComp<Client.Main.MyApp>]
         boleroScript
     ]
