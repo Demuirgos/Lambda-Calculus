@@ -9,11 +9,11 @@ module Interpreter
         | Lambda of Expression * Expression 
     and Envirement = list<string * Expression>
 
-    
+    let acceptedChars = [yield! ['a'..'z']; yield! ['+';'-';'/';'*';'^';'|';'&';'=';'<';'>';'!']; '_']
     let parseExpr = 
         let rec parseAtom =
             Parser {
-                let! atom = [yield! ['a'..'z'] ;'_'] |> Seq.toList |> anyOf |> many 1 
+                let! atom = acceptedChars |> Seq.toList |> anyOf |> many 1 
                 return atom
             } <?> "Atom" |>> (toString >> Atom)
         and parseApp = 
@@ -104,7 +104,7 @@ module Interpreter
                                             |> snd
                         if occurence then 
                             let localVars = allVariables body
-                            let result = ['a'..'z']
+                            let result = acceptedChars
                                             |> Seq.map (fun c -> c.ToString())
                                             |> Seq.tryFind (not << localVars.Contains)
                                             |> Option.map (fun repl -> 

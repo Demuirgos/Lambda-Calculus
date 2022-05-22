@@ -2,6 +2,7 @@ module Abstractor
     open Interpreter
     open Parsec
     type Thunk = Interpreter.Expression 
+    exception Error of string
     type Statement = 
         | Value             of Literal 
         | Identifier        of string 
@@ -11,15 +12,16 @@ module Abstractor
         | Unary             of Operation * Statement
         | Binary            of Statement * Operation * Statement
         | Branch            of Statement * Statement * Statement
+        | List              of Statement list
     and Literal =
         | True | False | Variable of int
-    and Operation   =   Add | Subs | Div | Mult | Exp | Or | And | Eq | Lt | Not | Xor | Gt | YComb
-                        static member toOp token =
-                            match token with 
-                            | "*" -> Mult  | "/" -> Div | "^" -> Exp | "+" -> Add
-                            | "&" -> And   | "|" -> Or  | "~" -> Not | "!" -> Xor 
-                            | "=" -> Eq    | "<" -> Lt  | ">" -> Gt  | "-" -> Subs
-                            | "Y" -> YComb | _ -> failwith "Failed Parsing"
+    and Operation   =   Add | Subs | Div | Mult | Exp | Or | And | Eq | Lt | Not | Xor | Gt | YComb | Custom of string
+                        static member toOp tokens =
+                            match tokens with 
+                            | ['*'] -> Mult  | ['/'] -> Div | ['^'] -> Exp | ['+'] -> Add
+                            | ['&'] -> And   | ['|'] -> Or  | ['~'] -> Not | ['!'] -> Xor 
+                            | ['='] -> Eq    | ['<'] -> Lt  | ['>'] -> Gt  | ['-'] -> Subs
+                            | ['Y'] -> YComb | _ -> Custom ( tokens |> List.map string |> String.concat "") 
     #nowarn "40"
     let parseExpr = 
         let rec parseLet topLevel=
@@ -38,7 +40,7 @@ module Abstractor
                     .>> consumeElse .>> pSpaces .>>. parseExpression
             } <?> "Binder" |>> (fun ((c,t),f) -> (c,t,f) |> Branch)
         and parseIdentifier = 
-            ['a'..'z'] |> Seq.toList |> anyOf |> many 1 <?> "Identifier" |>> (toString >> Identifier)
+            (['a'..'z']@['+';'-';'/';'*';'^';'|';'&';'=';'<';'>';'!']) |> Seq.toList |> anyOf |> many 1 <?> "Identifier" |>> (toString >> Identifier)
         and parseValue =
             Parser {
                 let [| parseT ; parseF |] = [| "true" ;"false"|] 
@@ -62,7 +64,7 @@ module Abstractor
             } <?> "Function" |>> (fun (args, body) -> (List.concat args, body) |> Function)
         and parseUnary = 
             Parser {
-                let uniOper = ['~';'-';'Y'] |> anyOf |>> (string >> Operation.toOp)
+                let uniOper = ['~';'-';'Y'] |> anyOf |> many 1 |>> Operation.toOp
                 let uniExpr = parseBinary <|> parseOperation <|> parseValue <|> parseFunction <|> parseIdentifier 
                 return! uniOper .>> pSpaces .>>. uniExpr
             } <?> "Unary" |>>  Unary
@@ -76,9 +78,16 @@ module Abstractor
         and parseBinary  = 
             Parser {
                 let operand = parseValue <|> parseUnary <|> parseIdentifier <|> parseOperation
-                let binOper = ['+';'-';'/';'*';'^';'|';'&';'=';'<';'>';'!'] |> anyOf |>> (string >> Operation.toOp)
+                let binOper = ['+';'-';'/';'*';'^';'|';'&';'=';'<';'>';'!'] |> anyOf |> many 1 |>> Operation.toOp
                 return! operand .>>  pSpaces .>>. binOper .>> pSpaces .>>. operand
             } <?> "Binary Term" |>> (fun ((lhs,op),rhs) -> (lhs,op,rhs) |> Binary)
+        and parseList = 
+            Parser {
+                let pElems=  ',' |> expect >>. pSpaces
+                                |> separate1By parseExpression
+                                |> betweenC ('[',']')
+                return! pElems
+            } <?> "List Expr" |>> List
         and parseExpression = 
             Parser {
                 let! expr = 
@@ -90,6 +99,7 @@ module Abstractor
                         parseBinary
                         parseValue
                         parseUnary
+                        parseList
                         parseIdentifier    
                     ] 
                 return expr
@@ -149,6 +159,10 @@ module Abstractor
                     | Lt  -> isZero (emitLambda (Binary(lhs, Subs, rhs))) | Gt  -> emitLambda (Binary(rhs, Lt, lhs))
                     | Eq  -> emitLambda (Binary(Binary(lhs, Lt, rhs), And, Binary(lhs, Gt, rhs)))
                     | Xor -> Applicative(Applicative(emitLambda rhs, emitLambda (Unary(Not, lhs))), emitLambda lhs)
+                    | Custom(token) -> emitLambda(Application(Identifier token, [lhs; rhs]))
+                 | List(elems)->
+                    printf "%A" elems
+                    raise(Error("not yet made"))
                  | Value(var) -> 
                     match var with 
                     | True -> Lambda(Atom "_a", Lambda(Atom "_b", Atom "_a"))
