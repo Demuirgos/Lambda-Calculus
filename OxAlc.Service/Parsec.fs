@@ -4,7 +4,7 @@ module Parsec
     
     let inline toString l = l |> ((List.map string) >> List.reduce (+))
     
-    type Error = string
+    type ErrorMessage = string
     [<AutoOpen>]
     module Position =
         type Position = Cursor of (int * int)
@@ -57,7 +57,7 @@ module Parsec
 
         type Result<'a> =
             | Success of 'a 
-            | Failure of label:string * message:Error * location:ParserPosition
+            | Failure of label:string * message:ErrorMessage * location:ParserPosition
         type Parser<'a> = {
             Function: (State -> Result<'a * State>)
             Label : string
@@ -239,9 +239,8 @@ module Parsec
         let between left parser right = 
             left >>. parser .>> right
 
-        let separate1By parser separator =
-            parser .>>. many 0 (separator >>. parser )
-            |>> (fun (h,l) -> h::l) 
+        let separateBy minCount parser separator =
+            many minCount (separator |> option >>. parser )
         
         let eof = 
             let innerProcess input= 

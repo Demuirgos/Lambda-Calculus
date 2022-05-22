@@ -13,7 +13,7 @@ let REPL args =
         let read =  function
                     | File(path) -> fun () -> [yield! File.ReadLines(path)]
                                               |> String.concat "\n"
-                    | _ -> Console.ReadLine 
+                    | _ -> fun () -> "let program := " + Console.ReadLine() + " end program" 
         let eval mode = 
             let operation = match mode with 
                             | Lambda -> Interpreter.parse
