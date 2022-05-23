@@ -7,22 +7,22 @@ module Abstractor
         | Value             of Literal 
         | Identifier        of string 
         | Bind              of Statement * Statement * Statement 
-        | Function          of Parameters * Statement 
+        | Function          of Parameter list * Statement 
         | Application       of Statement * Statement list
         | Unary             of Operation * Statement
         | Binary            of Statement * Operation * Statement
         | Branch            of Statement * Statement * Statement
     and Literal =
         | True | False | Variable of int | List of Statement list 
-    and Parameters = 
-        | Arguments of Statement list | Pattern of Statement list
-    and Operation   =   Dec |Add | Subs | Div | Mult | Exp | Or | And | Eq | Lt | Not | Xor | Gt | YComb | Custom of string
+    and Parameter = 
+        | Argument of Statement | Pattern of Statement list
+    and Operation   =   Cons |Add | Subs | Div | Mult | Exp | Or | And | Eq | Lt | Not | Xor | Gt | YComb | Custom of string
                         static member toOp tokens =
                             match tokens with 
                             | ['*'] -> Mult  | ['/'] -> Div  | ['^'] -> Exp | ['+'] -> Add
                             | ['&'] -> And   | ['|'] -> Or   | ['~'] -> Not | ['!'] -> Xor 
                             | ['='] -> Eq    | ['<'] -> Lt   | ['>'] -> Gt  | ['-'] -> Subs
-                            | ['Y'] -> YComb | [':';':'] -> Dec | _ -> Custom ( tokens |> List.map string |> String.concat "") 
+                            | ['Y'] -> YComb | [':';':'] -> Cons | _ -> Custom ( tokens |> List.map string |> String.concat "") 
     #nowarn "40"
     let parseExpr = 
         let rec parseLet topLevel=
@@ -35,13 +35,24 @@ module Abstractor
             Parser {
                 let [| consumeIf; consumeThen; consumeElse |] = [|"if"; "then"; "else"|] 
                                                                 |> Array.map (Seq.toList >> allOf)
-                let pCondition = parseUnary <|> parseBinary <|> parseOperation <|> parseValue <|> parseIdentifier
+                let pCondition = choice [parseUnary; parseBinary; parseOperation; parseValue; parseIdentifier]
                 return! consumeIf   >>. pSpaces  >>. pCondition      .>> pSpaces 
                     .>> consumeThen .>> pSpaces .>>. parseExpression .>> pSpaces 
                     .>> consumeElse .>> pSpaces .>>. parseExpression
-            } <?> "Binder" |>> (fun ((c,t),f) -> (c,t,f) |> Branch)
+            } <?> "Brancher" |>> (fun ((c,t),f) -> (c,t,f) |> Branch)
+        and parseternary =
+            Parser {
+                let [| consumeIf; consumeElse |] = [|'?'; ':'|] 
+                                                    |>  Array.map expect
+                let pCondition = choice [parseUnary; parseBinary; parseOperation; parseValue; parseIdentifier]
+                return!  pCondition .>> pSpaces .>> consumeIf   .>> pSpaces .>>. parseExpression 
+                                    .>> pSpaces .>> consumeElse .>> pSpaces .>>. parseExpression 
+            } <?> "Brancher" |>> (fun ((c,t),f) -> (c,t,f) |> Branch)
         and parseIdentifier = 
-            (['a'..'z']@['+';'-';'/';'*';'^';'|';'&';'=';'<';'>';'!']@['0'..'9']) |> Seq.toList |> anyOf |> many 1 <?> "Identifier" |>> (toString >> Identifier)
+            (['a'..'z']@['+';'-';'/';'*';'^';'|';'&';'=';'<';'>';'!']@['0'..'9']) 
+            |> Seq.toList 
+            |> anyOf |> many 1 
+            <?> "Identifier" |>> (toString >> Identifier)
         and parseValue =
             Parser {
                 let [| parseT ; parseF |] = [| "true" ;"false"|] 
@@ -58,18 +69,20 @@ module Abstractor
             Parser {
                 let pArrow = "=>" |> Seq.toList |> allOf
                 let consumeDec = "::" |> Seq.toList |> allOf
+                let pArg  = parseIdentifier 
+                            |> map (fun id -> Argument id )
                 let pPatt = parseIdentifier .>> pSpaces .>> consumeDec .>> pSpaces .>>. parseIdentifier
                             |> map (fun (h,t) -> Pattern [h; t])
                 let mParams =  ','  |> expect >>. pSpaces
-                                    |> separateBy 1 parseIdentifier
+                                    |> separateBy 1 (pPatt <|> pArg)
                                     |> betweenC ('(',')') 
-                                    |> map (fun l -> Arguments l)
-                return! (pPatt <|> mParams) .>> pSpaces .>> pArrow .>> pSpaces .>>. parseExpression
+                return! mParams .>> pSpaces .>> pArrow .>> pSpaces .>>. parseExpression
             } <?> "Function" |>> Function
         and parseUnary = 
             Parser {
                 let uniOper = ['~';'-';'Y'] |> anyOf |> many 1 |>> Operation.toOp
-                let uniExpr = parseBinary <|> parseOperation <|> parseValue <|> parseFunction <|> parseIdentifier 
+                let uniExpr =   (betweenC ('(',')') parseUnary)  
+                                <|> choice [ parseBinary; parseOperation; parseValue  ; parseFunction; parseIdentifier] 
                 return! uniOper .>> pSpaces .>>. uniExpr
             } <?> "Unary" |>>  Unary
         and parseOperation  = 
@@ -81,8 +94,11 @@ module Abstractor
             } <?> "Applicative" |>> Application
         and parseBinary  = 
             Parser {
-                let operand = parseOperation <|> parseValue <|> parseUnary <|> parseIdentifier
-                let binOper = ['+';'-';'/';'*';'^';'|';'&';'=';'<';'>';'!'] |> anyOf |> many 1 |>> Operation.toOp
+                let operand =   (betweenC ('(',')') parseBinary)   
+                                <|> choice [ parseUnary; parseOperation; parseValue; parseIdentifier] 
+                let binOper =   ['+';'-';'/';'*';'^';'|';'&';'=';'<';'>';'!'] 
+                                |> anyOf |> many 1 
+                                |>> Operation.toOp
                 return! operand .>>  pSpaces .>>. binOper .>> pSpaces .>>. operand
             } <?> "Binary Term" |>> (fun ((lhs,op),rhs) -> (lhs,op,rhs) |> Binary)
         and parseList = 
@@ -96,11 +112,11 @@ module Abstractor
             Parser {
                 let! expr = 
                     choice [    
-                        parseBrancher
+                        parseBrancher <|> parseternary
                         parseLet false
-                        parseOperation      
                         parseFunction
                         parseBinary
+                        parseOperation      
                         parseValue
                         parseUnary
                         parseList
@@ -114,8 +130,8 @@ module Abstractor
         // make this function emit lambda AST instead of parsable strings
         let rec curry =
             function 
-            | Function (Arguments [_] , _ ) as input -> input
-            | Function (Arguments (h::t),body) -> Function (Arguments [h], curry <| Function(Arguments t, body))
+            | Function ([_] , _ ) as input -> input
+            | Function ((h::t),body) -> Function ([h], curry <| Function(t, body))
             | _ -> failwith "Expression cannot be curried"
 
         let Result = (fromStr input, parseExpr) 
@@ -127,24 +143,20 @@ module Abstractor
             let rec emitLambda= function
                 | Bind(name, expr, value) ->
                     Applicative(Lambda(emitLambda name, emitLambda value), emitLambda expr)
-                | Function(inputs, body) as f->
-                    match inputs with
-                    | Arguments(parameters) ->
-                        let emit = function | Function(Arguments [param], expr) -> Lambda(emitLambda param, emitLambda expr)
-                                            | _ -> failwithf "%A is not a lambda, transpiling failed" (nameof f)
-                        match parameters with 
-                        | [] | [_] -> emit f
-                        | _ -> emit (curry f)
-                    | Pattern(h::[t]) -> 
-                        let head = Lambda(Atom "_l", Applicative(Atom "_l", emitLambda(Value True )))
-                        let tail = Lambda(Atom "_l", Applicative(Atom "_l", emitLambda(Value False)))
-                        Lambda(Atom "_l",
-                            Applicative(
-                                Lambda(emitLambda h, 
-                                    Applicative(head, Atom "_l")), 
-                                    Applicative(
-                                        Lambda(emitLambda t, Applicative(tail, Atom "_l")), 
-                                        emitLambda body)))
+                | Function _ as f->
+                    let emitFunction (Function([param], body)) = match param with 
+                        | Argument(a) -> Lambda(emitLambda a, emitLambda body)
+                        | Pattern(h::[t]) -> 
+                            let head = Lambda(Atom "_l", Applicative(Atom "_l", emitLambda(Value True )))
+                            let tail = Lambda(Atom "_l", Applicative(Atom "_l", emitLambda(Value False)))
+                            Lambda(Atom "_l",
+                                Applicative(
+                                    Lambda(emitLambda h, 
+                                        Applicative(head, Atom "_l")), 
+                                        Applicative(
+                                            Lambda(emitLambda t, Applicative(tail, Atom "_l")), 
+                                            emitLambda body)))
+                    f |> curry |> emitFunction
                 | Application(expr, args) as a ->
                     printfn "%A" a
                     let operation = emitLambda expr
@@ -176,21 +188,19 @@ module Abstractor
                     | Eq  -> emitLambda (Binary(Binary(lhs, Lt, rhs), And, Binary(lhs, Gt, rhs)))
                     | Xor -> Applicative(Applicative(emitLambda rhs, emitLambda (Unary(Not, lhs))), emitLambda lhs)
                     | Custom(token) -> emitLambda(Application(Identifier token, [lhs; rhs]))
-                    | Dec -> failwith "incomplete"
+                    | Cons -> 
+                        emitLambda (Value (List [lhs; rhs]))
                         // let f := (h::t) => h in f([1,2]) :=: let f := (l) => let h := head l in let t := tail l in h in f([1,2])
                  | Value(var) -> 
                     match var with 
                     | List(elems)-> 
-                        printfn "%A" elems
                         let cons = Lambda(Atom "_h", Lambda(Atom "_t", Lambda(Atom "_s", Applicative(Applicative(Atom "_s", Atom "_h"), Atom "_t"))))
                         let empty= Lambda(Atom "_l", Applicative(Atom "_l", Lambda(Atom "_h", Lambda(Atom "_t", emitLambda(Value False)))))
                         let nil  = Lambda(Atom "_l", emitLambda(Value True))
                         let rec emitList = function 
                             | []   -> nil
                             | h::t -> Applicative(Applicative(cons, emitLambda h), emitList t)
-                        let r = emitList elems
-                        printfn "%A" (Interpreter.toString (Ok r))
-                        r
+                        emitList elems
                     | True -> Lambda(Atom "_a", Lambda(Atom "_b", Atom "_a"))
                     | False -> Lambda(Atom "_a", Lambda(Atom "_b", Atom "_b"))
                     | Variable(var) ->
@@ -206,7 +216,7 @@ module Abstractor
     let rec uncompile =
         function 
         | Applicative(f, args) -> Application(uncompile f, [uncompile args])
-        | Lambda(p, b) -> Function(Arguments [uncompile p], uncompile b)
+        | Lambda(p, b) -> Function([Argument (uncompile p)], uncompile b)
         | Atom(name) -> Identifier(name)
 
     let parse text = Parsec.Parser.run (fromStr text) parseExpr
