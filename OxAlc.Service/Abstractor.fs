@@ -35,7 +35,7 @@ module Abstractor
             Parser {
                 let [| consumeIf; consumeThen; consumeElse |] = [|"if"; "then"; "else"|] 
                                                                 |> Array.map (Seq.toList >> allOf)
-                let pCondition = choice [parseUnary; parseBinary; parseOperation; parseValue; parseIdentifier]
+                let pCondition = choice [parseternary; parseUnary; parseBinary; parseOperation; parseValue; parseIdentifier]
                 return! consumeIf   >>. pSpaces  >>. pCondition      .>> pSpaces 
                     .>> consumeThen .>> pSpaces .>>. parseExpression .>> pSpaces 
                     .>> consumeElse .>> pSpaces .>>. parseExpression
