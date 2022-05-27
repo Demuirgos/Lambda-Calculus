@@ -129,7 +129,6 @@ module Abstractor
         parseLet true
 
     let transpile input = 
-        // make this function emit lambda AST instead of parsable strings
         let rec curry =
             function 
             | Function ([_] , _ ) as input -> input
@@ -149,7 +148,6 @@ module Abstractor
                     let emitFunction (Function([param], body)) = match param with 
                         | Argument(a)    -> Lambda(emitLambda a, emitLambda body)
                         | Pattern (h, t) as p ->
-                            printfn "%A" p 
                             let head = Lambda(Atom "_l", Applicative(Atom "_l", emitLambda(Value True )))
                             let tail = Lambda(Atom "_l", Applicative(Atom "_l", emitLambda(Value False)))
                             Lambda(Atom "_l",
@@ -162,7 +160,6 @@ module Abstractor
                                     Applicative(head, Atom "_l")))
                     f |> curry |> emitFunction
                 | Application(expr, args) as a ->
-                    printfn "%A" a
                     let operation = emitLambda expr
                     let rec wrap op = function
                         | [] -> op
@@ -193,10 +190,7 @@ module Abstractor
                     | Xor -> Applicative(Applicative(emitLambda rhs, emitLambda (Unary(Not, lhs))), emitLambda lhs)
                     | Custom(token) -> emitLambda(Application(Identifier token, [lhs; rhs]))
                     | Cons -> emitLambda (Value (List [lhs; rhs]))
-                    | Div -> failwith "Not Implemented"
-                    | Not -> failwith "Not Implemented"
-                    | YComb -> failwith "Not Implemented"
-                        // let f := (h::t) => h in f([1,2]) :=: let f := (l) => let h := head l in let t := tail l in h in f([1,2])
+                    | Div | Not | YComb -> failwith "Not Implemented"
                  | Value(var) -> 
                     match var with 
                     | List(elems)-> 
