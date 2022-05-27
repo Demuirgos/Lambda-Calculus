@@ -7,7 +7,7 @@ let program :=
     let add-to-two := (n) => n + 2 in 
     let value := add-to-two(5) in 
     if value > 5 ? value = 10 : false then    
-        add-n-to-head([23, 2, 3], 3)
+        mult-by-n([23, 2, 3], 3)
     else    
         23 * 3
 end program 
