@@ -48,7 +48,7 @@ module Interpreter
                 let isThere = id = identifier
                 (isThere, isThere)
             | Lambda (arg, body) -> 
-                let inArg = arg = Atom(identifier)
+                let inArg  = (identifier, arg ) ||> occurs |> fst 
                 let inBody = (identifier, body) ||> occurs |> fst 
                 (inArg || inBody, inArg && inBody)
             | Applicative(lhs, rhs) -> 
@@ -101,7 +101,7 @@ module Interpreter
                     else 
                         let occurence = (local, arg)
                                         ||> occurs
-                                            |> snd
+                                        |> snd
                         if occurence then 
                             let localVars = allVariables body
                             let result = acceptedChars
@@ -132,8 +132,7 @@ module Interpreter
                 | Applicative (Lambda(_), _) -> true
                 | Applicative (lhs, rhs) -> 
                     isBetaRedex lhs || isBetaRedex rhs
-                | Lambda (_, body) ->
-                    isBetaRedex body
+                | Lambda (_, body) -> isBetaRedex body
             let rec reduce expr = 
                 match expr with 
                 | Atom _ -> Ok expr
@@ -145,7 +144,7 @@ module Interpreter
                         Lambda (arg, body') |> Ok 
                     | error -> error
                 | Applicative(lhs, rhs) ->
-                    let lhsc,rhsc = isBetaRedex lhs,isBetaRedex rhs 
+                    let lhsc,rhsc = isBetaRedex lhs, isBetaRedex rhs 
                     match lhsc,rhsc with 
                     | (true, _) -> 
                         match reduce lhs with 
@@ -170,15 +169,12 @@ module Interpreter
     let toString expr = 
         match expr with 
         | Ok v ->
-            let rec toString' term = 
+            let rec toString term = 
                 match term with 
-                | Lambda(arg,body) -> 
-                    match arg with 
-                    | Atom(name) -> sprintf "λ%s.%s" name (toString' body)
-                    | _ -> failwith "invalid Lambda parameter"
+                | Lambda(arg,body) -> sprintf "λ%s.%s" (toString arg) (toString body)
                 | Atom(v) -> sprintf "%s" v
-                | Applicative(lhs,rhs) -> sprintf "(%s %s)" (toString' lhs) (toString' rhs)
-            toString' v
+                | Applicative(lhs,rhs) -> sprintf "(%s %s)" (toString lhs) (toString rhs)
+            toString v
         | Error e -> e
 
     let parse txt = (fromStr txt, parseExpr .>> eof) ||> run 
