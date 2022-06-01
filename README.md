@@ -3,7 +3,7 @@ A simple Programming Language Compiler to Lambda-Calculus, with a Lambda-Runtime
 Oxalc Example : 
 ```fsharp
 let program := 
-    Let cst := x * f(x) where x := 3
+    let cst := x * f(x) where x := 3
                         and f := (n) => n - 2 in
     let mult-by-n := (h::t, n) => h * m in
     let add-to-two := (n) => n + 2 in 
