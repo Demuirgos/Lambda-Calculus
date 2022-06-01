@@ -1,0 +1,13 @@
+let program :=
+    let x   :=  z * w where z := 2 
+                        and w := 3 in
+    let add-one    := (n) => n + 1 in 
+    let h+2     := (h::t) => h + 2 in 
+    let result := h([1, 2]) + f(x) in 
+    if result > 10 ? true : false then 
+        result + 10 
+    else 
+        let y := m + m where m := x in 
+        let i := y + y in 
+        i + 2  
+end program
