@@ -12,6 +12,7 @@ module Abstractor
         | Unary             of Operation * Statement
         | Binary            of Statement * Operation * Statement
         | Branch            of Statement * Statement * Statement
+        | Compound          of Statement * (Statement * Statement) list   
     and Literal =
         | True | False | Variable of int | List of Statement list 
     and Parameter = 
@@ -25,12 +26,22 @@ module Abstractor
                             | ['Y'] -> YComb | ['@'] -> Cons | _ -> Custom ( tokens |> List.map string |> String.concat "") 
     #nowarn "40"
     let parseExpr = 
-        let rec parseLet topLevel=
-            Parser {
-                let [|consumeLet; consumeIn; consumeEnd; consumeEq|] = [|"let"; "in"; "end"; ":="|] |> Array.map (Seq.toList >> allOf)
-                return! consumeLet >>. pSpaces >>. parseIdentifier .>> pSpaces .>> consumeEq .>> pSpaces .>>. parseExpression
-                                  .>>  pSpaces .>> (if topLevel then consumeEnd else consumeIn)  .>> pSpaces .>>. parseExpression
-            } <?> "Binder" |>> (fun ((a,b),c) -> (a,b,c) |> Bind)
+        let rec parseLet topLevel =
+                Parser {
+                    let [|consumeLet; consumeIn; consumeEnd; consumeEq|] = [|"let"; "in"; "end"; ":="|] |> Array.map (Seq.toList >> allOf)
+                    return! consumeLet >>. pSpaces >>. parseIdentifier .>> pSpaces .>> consumeEq .>> pSpaces .>>. parseExpression
+                                    .>>  pSpaces .>> (if topLevel then consumeEnd else consumeIn)  .>> pSpaces .>>. parseExpression
+                } <?> "Binder" |>> (fun ((a,b),c) -> (a,b,c) |> Bind)
+        and parseCompound =
+                Parser {
+                    let [|consumeWhere; consumeEq; consumeAnd|] = [|"where"; ":="; "and"|] |> Array.map (Seq.toList >> allOf)
+                    let parseExpression =   choice [    
+                                                parseBrancher; parseFunction; parseBinary; parseOperation; parseValue; parseUnary; parseIdentifier    
+                                            ] 
+                    let parseBinders = parseIdentifier .>> pSpaces  .>> consumeEq     .>> pSpaces .>>. parseExpression .>> option (pSpaces .>> consumeAnd .>> pSpaces )
+                                        |> many 1
+                    return! parseExpression .>> pSpaces .>> consumeWhere .>> pSpaces .>>. parseBinders  
+                } <?> "Binder" |>> (fun (a,l) -> (a,l) |> Compound)
         and parseBrancher =
             let parseTernary =
                 Parser {
@@ -117,6 +128,7 @@ module Abstractor
                     choice [    
                         parseBrancher
                         parseLet false
+                        parseCompound
                         parseFunction
                         parseBinary
                         parseOperation      
@@ -140,10 +152,18 @@ module Abstractor
         match Result with
         | Success (program,r) -> 
             let toSyntaxTree = parse     >> (function Success(code,_) -> code) >> 
-                               interpret >> (function Ok(program)     -> program)
+                               interpret >> (function Ok (program)    -> program)
             let rec emitLambda= function
                 | Bind(name, expr, value) ->
                     Applicative(Lambda(emitLambda name, emitLambda value), emitLambda expr)
+                | Compound(expr, binds) as e -> 
+                    let rec emitBinds binds = 
+                        match binds with 
+                        | [] -> emitLambda expr
+                        | bind::binds ->
+                            let (id, value) = bind 
+                            Applicative(Lambda(emitLambda id, emitBinds binds), emitLambda value)
+                    emitBinds binds
                 | Function _ as f->
                     let emitFunction (Function([param], body)) = match param with 
                         | Argument(a)    -> Lambda(emitLambda a, emitLambda body)
