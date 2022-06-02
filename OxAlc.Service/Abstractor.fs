@@ -94,14 +94,18 @@ module Abstractor
                             |> map (fun id -> Argument id )
                 let pPatt = parseIdentifier .>> pSpaces .>> consumeDec .>> pSpaces .>>. parseIdentifier
                             |> map (fun (h,t) -> Pattern (h, t))
+                let mParam  = pPatt <|> pArg |>> fun param -> [param]
                 let mParams =  ','  |> expect >>. pSpaces
                                     |> separateBy 1 (pPatt <|> pArg)
-                                    |> betweenC ('(',')') 
+                                    |> betweenC ('(',')')
+                                <|> mParam
                 return! mParams .>> pSpaces .>> pArrow .>> pSpaces .>>. parseExpression
             } <?> "Function" |>> Function
         and parseUnary = 
             Parser {
                 let uniOper = ['~';'-';'Y'] |> anyOf |> many 1 |>> Operation.toOp
+                              <|> ( "rec" |> Seq.toList 
+                                    |> allOf |>> fun _ -> YComb)
                 let uniExpr =   (betweenC ('(',')') parseUnary)  
                                 <|> choice [ parseBinary; parseOperation; parseValue  ; parseFunction; parseIdentifier] 
                 return! uniOper .>> pSpaces .>>. uniExpr
