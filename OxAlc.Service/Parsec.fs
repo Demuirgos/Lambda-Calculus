@@ -252,6 +252,7 @@ module Parsec
             {Function = innerProcess; Label = "EOF"}
     [<AutoOpen>]
     module Predefined = 
+        let parserWord str = str |> List.ofSeq |> allOf
         let pSpaces = many 0 (anyOf ['\n'; '\r';  ' '; '\t'])
         let cleanStr s = s |> String.filter (function | ' ' | '\n' -> false | _ -> true)
         let betweenC (s,f) p = between (expect s) p (expect f)

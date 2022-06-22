@@ -41,13 +41,13 @@ module Abstractor
     let parseExpr = 
         let rec parseLet topLevel =
                 Parser {
-                    let [|consumeLet; consumeIn; consumeEnd; consumeEq|] = [|"let"; "in"; "end"; ":="|] |> Array.map (Seq.toList >> allOf)
+                    let [|consumeLet; consumeIn; consumeEnd; consumeEq|] = [|"let"; "in"; "end"; ":="|] |> Array.map parserWord
                     return! consumeLet >>. pSpaces >>. parseIdentifier .>> pSpaces .>> consumeEq .>> pSpaces .>>. parseExpression
                                     .>>  pSpaces .>> (if topLevel then consumeEnd else consumeIn)  .>> pSpaces .>>. parseExpression
                 } <?> "Binder" |>> (fun ((a,b),c) -> (a,b,c) |> Bind)
         and parseCompound =
                 Parser {
-                    let [|consumeWhere; consumeEq; consumeAnd|] = [|"where"; ":="; "and"|] |> Array.map (Seq.toList >> allOf)
+                    let [|consumeWhere; consumeEq; consumeAnd|] = [|"where"; ":="; "and"|] |> Array.map parserWord
                     let parseExpression =   choice [    
                                                 parseBrancher; parseFunction; parseBinary; parseOperation; parseValue; parseUnary; parseIdentifier    
                                             ] 
@@ -67,7 +67,7 @@ module Abstractor
             let parseIf = 
                 Parser {
                     let [| consumeIf; consumeThen; consumeElse |] = [|"if"; "then"; "else"|] 
-                                                                    |> Array.map (Seq.toList >> allOf)
+                                                                    |> Array.map parserWord
                     let pCondition = choice [parseTernary; parseUnary; parseBinary; parseOperation; parseValue; parseIdentifier]
                     return! consumeIf   >>. pSpaces  >>. pCondition      .>> pSpaces 
                         .>> consumeThen .>> pSpaces .>>. parseExpression .>> pSpaces 
@@ -83,7 +83,7 @@ module Abstractor
             let rec parseSimple = 
                 Parser {
                     let [| parseT ; parseF |] = [| "true" ;"false"|] 
-                                                |> Array.map (Seq.toList >> allOf)
+                                                |> Array.map parserWord
                     let parseV     = ['0'..'9'] |> Seq.toList |> anyOf |> many 1
                     return! choice [
                         parseT; parseF; parseV
@@ -99,16 +99,6 @@ module Abstractor
                                     |> betweenC ('[',']')
                     return! pElems
                 } <?> "List Expr" |>> (List >> Value) 
-            and parseRecord = 
-                Parser {
-                    let parseBinder = ":=:" |> Seq.toList |> allOf 
-                    let parseBind = parseIdentifier .>> pSpaces .>> parseBinder .>> pSpaces .>>. parseExpression
-                    let pElems= ',' |> expect >>. pSpaces
-                                    |> separateBy 0 parseBind
-                                    |> map Map.ofList
-                                    |> betweenC ('{','}')
-                    return! pElems
-                } <?> "Record Expr" |>> (Record >> Value)
             and parseString =
                 Parser {
                     let validChars = ([' ']@['a'..'z']@['+';'-';'/';'*';'^';'|';'&';'=';'<';'>';'!';'@']@['0'..'9']) 
@@ -120,10 +110,10 @@ module Abstractor
                 Parser {
                     return! expect '?' |> many 1
                 } <?> "Hole Expr" |>> (fun _ -> Hole |> Value)
-            parseSimple <|> parseList <|> parseRecord <|> parseString <|> parseHole
+            parseSimple <|> parseList <|> parseString <|> parseHole
         and parseFunction  = 
             Parser {
-                let [pArrow ; consumeDec] = ["=>"; "::"] |> List.map (Seq.toList >> allOf)
+                let [pArrow ; consumeDec] = ["=>"; "::"] |> List.map parserWord
                 let pArg  = parseIdentifier 
                             |>> Argument
                 let pPatt = parseIdentifier .>> pSpaces .>> consumeDec .>> pSpaces .>>. parseIdentifier
@@ -165,7 +155,7 @@ module Abstractor
                 let parsefiles = ',' |> expect >>. pSpaces
                                 |> separateBy 0 parseIdentifier
                                 |> betweenC ('[',']')
-                let [|consumeInclude; consumeFor|]  = [|"include"; "for"|]  |> Array.map (Seq.toList >> allOf)
+                let [|consumeInclude; consumeFor|]  = [|"include"; "for"|]  |> Array.map parserWord
                 return! consumeInclude >>. pSpaces >>. parsefiles .>> pSpaces .>> consumeFor .>> pSpaces .>>. parseExpression
             } <?> "Include" |>> Context
         and parseExpression = 
