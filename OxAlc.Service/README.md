@@ -7,7 +7,7 @@
 		| Lambda      : "λx.y"     = λName.Terminology 
 		| Name        : "x"        = [a-z]+
 		
-# MLAbstraction Language Grammar :
+# MLAbstraction Language Grammar (old) :
 	 Expression := 
 		| Bind(Name, Expression)   : "let x = y in x" 
 		| Func([Name], Expression) : "let f = (y,w) => w in f"
