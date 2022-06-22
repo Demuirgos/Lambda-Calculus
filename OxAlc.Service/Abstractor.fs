@@ -2,6 +2,7 @@ module Abstractor
     open Interpreter
     open Parsec
     open System.IO
+    open System.Text.RegularExpressions
     type Thunk = Interpreter.Expression 
     exception Error of string
     type Statement = 
@@ -14,9 +15,13 @@ module Abstractor
         | Binary            of Statement * Operation * Statement
         | Branch            of Statement * Statement * Statement
         | Compound          of Statement * (Statement * Statement) list   
-        | Context           of Statement list * Statement   
+        | Context           of Statement list * Statement              
     and Literal =
-        | Hole | True | False | Variable of int | String of List<char> | List of List<Statement>  | Record of Map<Statement,Statement>
+        | Hole | True | False 
+        | Variable of int 
+        | String of List<char> 
+        | List of List<Statement>  
+        | Record of Map<Statement,Statement>
     and Parameter = 
         | Argument of Statement | Pattern of Statement * Statement
     and Operation   =   Cons |Add | Subs | Div | Mult | Exp | Or | And | Eq | Lt | Not | Xor | Gt | YComb | Custom of string
@@ -26,6 +31,12 @@ module Abstractor
                             | ['&'] -> And   | ['|'] -> Or   | ['~'] -> Not | ['!'] -> Xor 
                             | ['='] -> Eq    | ['<'] -> Lt   | ['>'] -> Gt  | ['-'] -> Subs
                             | ['Y'] -> YComb | ['@'] -> Cons | _ -> Custom ( tokens |> List.map string |> String.concat "") 
+    
+    let (|Comment|_|) pattern input =
+        let regex = Regex.Match(input, pattern)
+        if regex.Success then Some([ for m in regex.Captures do m ])
+        else None
+
     #nowarn "40"
     let parseExpr = 
         let rec parseLet topLevel =
@@ -176,7 +187,17 @@ module Abstractor
             } <?> "Expression" 
         parseLet true
 
-    let transpile input = 
+    let transpile rawInput = 
+        let input = 
+            match rawInput with 
+            | Comment "\(\*.*?\*\)" comments ->
+                let rec removeComments (str:string) (comments: Capture list) =  
+                    match comments with
+                    | [] -> str
+                    | h::t -> removeComments (str.Remove(h.Index, h.Length)) t
+                removeComments rawInput comments
+            | _ -> rawInput
+        printfn "%s" input
         let rec curry =
             function 
             | Function ([_] , _ ) as input -> input

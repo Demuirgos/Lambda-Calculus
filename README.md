@@ -2,10 +2,10 @@
 A simple Programming Language Compiler to Lambda-Calculus, with a Lambda-Runtime 
 Oxalc Example :
  
-* in a sepatate file called library.oxalc :
+* in a separate file called library.oxalc :
 ```fsharp
 let library := 
-    let ** := (h::t, n) => h * m in 
+    let ** := (h::t, n) => h * n in (*this function gets the head and multiplies it by n*)
     let add-to-two := (n) => n + 2 in 
     ???
 end library 
