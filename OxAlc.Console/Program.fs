@@ -17,7 +17,7 @@ let REPL args =
         let eval mode = 
             let operation = match mode with 
                             | Lambda -> Interpreter.parse
-                            | _ ->  Abstractor.transpile 
+                            | _ ->  transpile LCR
             operation >> function 
                 | Success(code,_) -> code |> (interpret >> toString)
                 | error-> error |> toResult

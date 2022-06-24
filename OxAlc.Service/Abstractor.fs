@@ -15,13 +15,13 @@ module Abstractor
         | Binary            of Statement * Operation * Statement
         | Branch            of Statement * Statement * Statement
         | Compound          of Statement * (Statement * Statement) list   
-        | Context           of Statement list * Statement              
+        | Context           of Statement list * Statement
     and Literal =
         | Hole | True | False 
         | Variable of int 
         | String of List<char> 
         | List of List<Statement>  
-        | Record of Map<Statement,Statement>
+        | Record of Map<string,Statement>
     and Parameter = 
         | Argument of Statement | Pattern of Statement * Statement
     and Operation   =   Cons |Add | Subs | Div | Mult | Exp | Or | And | Eq | Lt | Not | Xor | Gt | YComb | Custom of string
@@ -30,8 +30,9 @@ module Abstractor
                             | ['*'] -> Mult  | ['/'] -> Div  | ['^'] -> Exp | ['+'] -> Add
                             | ['&'] -> And   | ['|'] -> Or   | ['~'] -> Not | ['!'] -> Xor 
                             | ['='] -> Eq    | ['<'] -> Lt   | ['>'] -> Gt  | ['-'] -> Subs
-                            | ['Y'] -> YComb | ['@'] -> Cons | _ -> Custom ( tokens |> List.map string |> String.concat "") 
-    
+                            | [ 'Y'] -> YComb | ['@'] -> Cons | _ -> Custom ( tokens |> List.map string |> String.concat "") 
+    and Backend = LCR | LLVM | MSIL
+
     let (|Comment|_|) pattern input =
         let regex = Regex.Match(input, pattern)
         if regex.Success then Some([ for m in regex.Captures do m ])
@@ -177,125 +178,127 @@ module Abstractor
             } <?> "Expression" 
         parseLet true
 
-    let transpile rawInput = 
-        let input = 
-            match rawInput with 
-            | Comment "\(\*.*?\*\)" comments ->
-                let rec removeComments (str:string) (comments: Capture list) =  
-                    match comments with
-                    | [] -> str
-                    | h::t -> removeComments (str.Remove(h.Index, h.Length)) t
-                removeComments rawInput comments
-            | _ -> rawInput
-        printfn "%s" input
-        let rec curry =
-            function 
-            | Function ([_] , _ ) as input -> input
-            | Function ((h::t),body) -> Function ([h], curry <| Function(t, body))
-            | _ -> failwith "Expression cannot be curried"
+    let transpile backend rawInput  = 
+        match backend with 
+        | LCR -> 
+            let input = 
+                match rawInput with 
+                | Comment "\(\*.*?\*\)" comments ->
+                    let rec removeComments (str:string) (comments: Capture list) =  
+                        match comments with
+                        | [] -> str
+                        | h::t -> removeComments (str.Remove(h.Index, h.Length)) t
+                    removeComments rawInput comments
+                | _ -> rawInput
+            let rec curry =
+                function 
+                | Function ([_] , _ ) as input -> input
+                | Function ((h::t),body) -> Function ([h], curry <| Function(t, body))
+                | _ -> failwith "Expression cannot be curried"
 
-        let parseExp arg = (fromStr arg, parseExpr) ||> run 
-        let Result = parseExp input
-        match Result with
-        | Success (program,r) -> 
-            let toSyntaxTree = parse     >> (function Success(code,_) -> code) >> 
-                               interpret >> (function Ok (program)    -> program)
-            let rec emitLambda= function
-                | Context(files, program) ->
-                    let filesContents = files |> List.map (function Identifier(path) 
-                                                                                                -> path |> (sprintf "%s.oxalc") 
-                                                                                                        |> File.ReadAllText 
-                                                                                                        |> parseExp)
-                    let replaceLastNode expr = 
-                        function Bind(_, defs, _) -> 
-                            let rec loop target = 
-                                match target with 
-                                | Bind (n, e, Value(Hole)) -> Bind(n ,e, expr)
-                                | Bind (n, e, v) -> Bind(n,e, loop v)
-                                | _ as lib-> failwithf "%A invalid format for Library" lib
-                            loop defs 
-                    let rec wrapFile filesASTs exprAcc =  
-                        match List.rev filesASTs with 
-                        | [] -> exprAcc
-                        | h::t -> 
-                            match h with 
-                            | Success(expr, _) -> wrapFile t (replaceLastNode exprAcc expr)
-                            | _ as error-> failwithf "%A" error
-                    let r = (wrapFile filesContents program)  
-                    emitLambda r
-                | Bind(name, expr, value) ->
-                    Applicative(Lambda(emitLambda name, emitLambda value), emitLambda expr)
-                | Compound(expr, binds) as e -> 
-                    let rec emitBinds binds = 
-                        match binds with 
-                        | [] -> emitLambda expr
-                        | bind::binds ->
-                            let (id, value) = bind 
-                            Applicative(Lambda(emitLambda id, emitBinds binds), emitLambda value)
-                    emitBinds binds
-                | Function _ as f->
-                    let emitFunction (Function([param], body)) = match param with 
-                        | Argument(a)    -> Lambda(emitLambda a, emitLambda body)
-                        | Pattern (h, t) as p ->
-                            let head = Lambda(Atom "_l", Applicative(Atom "_l", emitLambda(Value True )))
-                            let tail = Lambda(Atom "_l", Applicative(Atom "_l", emitLambda(Value False)))
-                            Lambda(Atom "_l", Applicative(Lambda(emitLambda h, Applicative(Lambda(emitLambda t, emitLambda body), Applicative(tail, Atom "_l"))), Applicative(head, Atom "_l")))
-                    f |> curry |> emitFunction
-                | Application(expr, args) as a ->
-                    let operation = emitLambda expr
-                    let rec wrap op = function
-                        | [] -> op
-                        | h::t -> wrap (Applicative(op, (emitLambda h))) t
-                    wrap operation args
-                | Identifier(name) -> Atom name
-                | Unary(Op, rhs) -> 
-                    match Op with 
-                    | Not -> Applicative(Applicative(emitLambda rhs, emitLambda (Value False)), emitLambda (Value True))
-                    | YComb ->
-                        let Y = "\\_g.(\\_y.(_g (_y _y)) \\_y.(_g (_y _y)))" |> toSyntaxTree
-                        Applicative(Y, (emitLambda rhs))
-                    | _ -> failwith "Unary operator not supported" 
-                | Branch(cond,tClause, fClause) as t -> 
-                    Applicative (Applicative(emitLambda cond, emitLambda tClause), emitLambda fClause)
-                | Binary(lhs, op, rhs) ->
-                    let isZero arg = Applicative(Applicative(arg,Lambda(Atom "_w", emitLambda (Value False))), emitLambda (Value True))
-                    let predec = "\\_n.\\_f.\\_x.(((_n \\_g.\\_h.(_h (_g _f))) \\_u._x) \\_u._u)" |> toSyntaxTree
-                    match op  with 
-                    | Add -> Lambda(Atom "_g", Lambda(Atom "_v", Applicative(Applicative(emitLambda lhs, Atom "_g"), Applicative(Applicative(emitLambda rhs, Atom "_g"), Atom "_v"))))
-                    | Mult-> Lambda(Atom "_g", Lambda(Atom "_v", Applicative(Applicative(emitLambda lhs, Applicative(emitLambda rhs, Atom "_g")), Atom "_v")))
-                    | Exp -> Applicative(emitLambda rhs, emitLambda lhs)
-                    | And -> Applicative(Applicative(emitLambda rhs, emitLambda lhs), emitLambda (Value False))
-                    | Or  -> Applicative(Applicative(emitLambda rhs, emitLambda (Value False)), emitLambda lhs)
-                    | Subs-> Applicative(Applicative(emitLambda rhs, predec), emitLambda lhs)
-                    | Lt  -> isZero (emitLambda (Binary(lhs, Subs, rhs))) | Gt  -> emitLambda (Binary(rhs, Lt, lhs))
-                    | Eq  -> emitLambda (Binary(Binary(lhs, Lt, rhs), And, Binary(lhs, Gt, rhs)))
-                    | Xor -> Applicative(Applicative(emitLambda rhs, emitLambda (Unary(Not, lhs))), emitLambda lhs)
-                    | Custom(token) -> emitLambda(Application(Identifier token, [lhs; rhs]))
-                    | Cons -> emitLambda (Value (List [lhs; rhs]))
-                    | Div | Not | YComb -> failwith "Not Implemented"
-                 | Value(var) -> 
-                    match var with 
-                    | List(elems)-> 
-                        let cons = Lambda(Atom "_h", Lambda(Atom "_t", Lambda(Atom "_s", Applicative(Applicative(Atom "_s", Atom "_h"), Atom "_t"))))
-                        let empty= Lambda(Atom "_l", Applicative(Atom "_l", Lambda(Atom "_h", Lambda(Atom "_t", emitLambda(Value False)))))
-                        let nil  = Lambda(Atom "_l", Applicative(Atom "_l", emitLambda(Value True )))
-                        let rec emitList = function 
-                            | []   -> nil
-                            | h::t -> Applicative(Applicative(cons, emitLambda h), emitList t)
-                        emitList elems
-                    | True -> Lambda(Atom "_a", Lambda(Atom "_b", Atom "_a"))
-                    | False -> Lambda(Atom "_a", Lambda(Atom "_b", Atom "_b"))
-                    | Variable(var) ->
-                        let funcn, varn = "_a", "_b"
-                        let rec loop n = 
-                            match n with 
-                            | 0 -> Atom varn
-                            | _ -> Applicative(Atom funcn, (loop (n - 1)))
-                        Lambda(Atom funcn, Lambda(Atom varn, loop var))
-                    | _ as v -> failwithf "%A is not supported by Lambda-Calculus" v 
-            Success (emitLambda program, r)
-        | Failure(l, e, idx) -> Failure(l,e,idx)
-    
+            let parseExp arg = (fromStr arg, parseExpr) ||> run 
+            let Result = parseExp input
+            match Result with
+            | Success (program,r) -> 
+                let toSyntaxTree = parse     >> (function Success(code,_) -> code) >> 
+                                interpret >> (function Ok (program)    -> program)
+                let rec emitLambda= function
+                    | Context(files, program) ->
+                        let filesContents = files |> List.map (function Identifier(path) 
+                                                                                                    -> path |> (sprintf "%s.oxalc") 
+                                                                                                            |> File.ReadAllText 
+                                                                                                            |> parseExp)
+                        let replaceLastNode expr = 
+                            function Bind(_, defs, _) -> 
+                                let rec loop target = 
+                                    match target with 
+                                    | Bind (n, e, Value(Hole)) -> Bind(n ,e, expr)
+                                    | Bind (n, e, v) -> Bind(n,e, loop v)
+                                    | _ as lib-> failwithf "%A invalid format for Library" lib
+                                loop defs 
+                        let rec wrapFile filesASTs exprAcc =  
+                            match List.rev filesASTs with 
+                            | [] -> exprAcc
+                            | h::t -> 
+                                match h with 
+                                | Success(expr, _) -> wrapFile t (replaceLastNode exprAcc expr)
+                                | _ as error-> failwithf "%A" error
+                        let r = (wrapFile filesContents program)  
+                        emitLambda r
+                    | Bind(name, expr, value) ->
+                        Applicative(Lambda(emitLambda name, emitLambda value), emitLambda expr)
+                    | Compound(expr, binds) as e -> 
+                        let rec emitBinds binds = 
+                            match binds with 
+                            | [] -> emitLambda expr
+                            | bind::binds ->
+                                let (id, value) = bind 
+                                Applicative(Lambda(emitLambda id, emitBinds binds), emitLambda value)
+                        emitBinds binds
+                    | Function _ as f->
+                        let emitFunction (Function([param], body)) = match param with 
+                            | Argument(a)    -> Lambda(emitLambda a, emitLambda body)
+                            | Pattern (h, t) as p ->
+                                let head = Lambda(Atom "_l", Applicative(Atom "_l", emitLambda(Value True )))
+                                let tail = Lambda(Atom "_l", Applicative(Atom "_l", emitLambda(Value False)))
+                                Lambda(Atom "_l", Applicative(Lambda(emitLambda h, Applicative(Lambda(emitLambda t, emitLambda body), Applicative(tail, Atom "_l"))), Applicative(head, Atom "_l")))
+                        f |> curry |> emitFunction
+                    | Application(expr, args) as a ->
+                        let operation = emitLambda expr
+                        let rec wrap op = function
+                            | [] -> op
+                            | h::t -> wrap (Applicative(op, (emitLambda h))) t
+                        wrap operation args
+                    | Identifier(name) -> Atom name
+                    | Unary(Op, rhs) -> 
+                        match Op with 
+                        | Not -> Applicative(Applicative(emitLambda rhs, emitLambda (Value False)), emitLambda (Value True))
+                        | YComb ->
+                            let Y = "\\_g.(\\_y.(_g (_y _y)) \\_y.(_g (_y _y)))" |> toSyntaxTree
+                            Applicative(Y, (emitLambda rhs))
+                        | _ -> failwith "Unary operator not supported" 
+                    | Branch(cond,tClause, fClause) as t -> 
+                        Applicative (Applicative(emitLambda cond, emitLambda tClause), emitLambda fClause)
+                    | Binary(lhs, op, rhs) ->
+                        let isZero arg = Applicative(Applicative(arg,Lambda(Atom "_w", emitLambda (Value False))), emitLambda (Value True))
+                        let predec = "\\_n.\\_f.\\_x.(((_n \\_g.\\_h.(_h (_g _f))) \\_u._x) \\_u._u)" |> toSyntaxTree
+                        match op  with 
+                        | Add -> Lambda(Atom "_g", Lambda(Atom "_v", Applicative(Applicative(emitLambda lhs, Atom "_g"), Applicative(Applicative(emitLambda rhs, Atom "_g"), Atom "_v"))))
+                        | Mult-> Lambda(Atom "_g", Lambda(Atom "_v", Applicative(Applicative(emitLambda lhs, Applicative(emitLambda rhs, Atom "_g")), Atom "_v")))
+                        | Exp -> Applicative(emitLambda rhs, emitLambda lhs)
+                        | And -> Applicative(Applicative(emitLambda rhs, emitLambda lhs), emitLambda (Value False))
+                        | Or  -> Applicative(Applicative(emitLambda rhs, emitLambda (Value False)), emitLambda lhs)
+                        | Subs-> Applicative(Applicative(emitLambda rhs, predec), emitLambda lhs)
+                        | Lt  -> isZero (emitLambda (Binary(lhs, Subs, rhs))) | Gt  -> emitLambda (Binary(rhs, Lt, lhs))
+                        | Eq  -> emitLambda (Binary(Binary(lhs, Lt, rhs), And, Binary(lhs, Gt, rhs)))
+                        | Xor -> Applicative(Applicative(emitLambda rhs, emitLambda (Unary(Not, lhs))), emitLambda lhs)
+                        | Custom(token) -> emitLambda(Application(Identifier token, [lhs; rhs]))
+                        | Cons -> emitLambda (Value (List [lhs; rhs]))
+                        | Div | Not | YComb -> failwith "Not Implemented"
+                    | Value(var) -> 
+                        match var with 
+                        | List(elems)-> 
+                            let cons = Lambda(Atom "_h", Lambda(Atom "_t", Lambda(Atom "_s", Applicative(Applicative(Atom "_s", Atom "_h"), Atom "_t"))))
+                            let empty= Lambda(Atom "_l", Applicative(Atom "_l", Lambda(Atom "_h", Lambda(Atom "_t", emitLambda(Value False)))))
+                            let nil  = Lambda(Atom "_l", Applicative(Atom "_l", emitLambda(Value True )))
+                            let rec emitList = function 
+                                | []   -> nil
+                                | h::t -> Applicative(Applicative(cons, emitLambda h), emitList t)
+                            emitList elems
+                        | True -> Lambda(Atom "_a", Lambda(Atom "_b", Atom "_a"))
+                        | False -> Lambda(Atom "_a", Lambda(Atom "_b", Atom "_b"))
+                        | Variable(var) ->
+                            let funcn, varn = "_a", "_b"
+                            let rec loop n = 
+                                match n with 
+                                | 0 -> Atom varn
+                                | _ -> Applicative(Atom funcn, (loop (n - 1)))
+                            Lambda(Atom funcn, Lambda(Atom varn, loop var))
+                        | _ as v -> failwithf "%A is not supported by Lambda-Calculus" v 
+                Success (emitLambda program, r)
+            | Failure(l, e, idx) -> Failure(l,e,idx)
+        | _ -> failwith "Backend not supported : Yet" 
+
     let rec uncompile =
         function 
         | Applicative(f, args) -> Application(uncompile f, [uncompile args])
