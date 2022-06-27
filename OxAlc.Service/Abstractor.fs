@@ -4,7 +4,6 @@ module Abstractor
     open System.IO
     open System.Text.RegularExpressions
     type Thunk = Interpreter.Expression 
-    exception Error of string
     type Statement = 
         | Value             of Literal 
         | Identifier        of string 
@@ -204,27 +203,27 @@ module Abstractor
                                 interpret >> (function Ok (program)    -> program)
                 let rec emitLambda= function
                     | Context(files, program) ->
-                        let filesContents = files |> List.map (function Identifier(path) 
+                        let filesContents = files  |> List.map (function Identifier(path) 
                                                                                                     -> path |> (sprintf "%s.oxalc") 
                                                                                                             |> File.ReadAllText 
                                                                                                             |> parseExp)
-                        let replaceLastNode expr = 
-                            function Bind(_, defs, _) -> 
-                                let rec loop target = 
-                                    match target with 
-                                    | Bind (n, e, Value(Hole)) -> Bind(n ,e, expr)
-                                    | Bind (n, e, v) -> Bind(n,e, loop v)
-                                    | _ as lib-> failwithf "%A invalid format for Library" lib
-                                loop defs 
-                        let rec wrapFile filesASTs exprAcc =  
-                            match List.rev filesASTs with 
-                            | [] -> exprAcc
-                            | h::t -> 
-                                match h with 
-                                | Success(expr, _) -> wrapFile t (replaceLastNode exprAcc expr)
-                                | _ as error-> failwithf "%A" error
-                        let r = (wrapFile filesContents program)  
-                        emitLambda r
+                        let all xs = 
+                            let folder = fun state next -> 
+                                match (state, next) with 
+                                | (Ok ys, Success (n, s)) -> ys |> List.append [ n ] |> Ok
+                                | _  -> Error "File import Failed"
+                            Seq.fold folder (Ok []) xs
+                        let rec wrapFiles filesAst program = 
+                            match filesAst with 
+                            | []   -> program
+                            | Bind(n, f, e)::t ->
+                                Bind(n, f, Application(n, [wrapFiles t program]))
+                        match all filesContents with
+                        | Ok (Asts) ->   
+                            let r = wrapFiles (Asts) program
+                            printfn "%A" r
+                            emitLambda r
+                        | Error(msg) -> failwith msg
                     | Bind(name, expr, value) ->
                         Applicative(Lambda(emitLambda name, emitLambda value), emitLambda expr)
                     | Compound(expr, binds) as e -> 
