@@ -4,13 +4,12 @@ Oxalc Example :
  
 * in a separate file called library.oxalc :
 ```fsharp
-let library := 
+let library := (reader) => 
     let ** := (h::t, n) => h * n in (*this function gets the head and multiplies it by n*)
     let add-to-two := (n) => n + 2 in 
-    ???
+    reader
 end library 
 ```
-
 * in our main file :
 ```fsharp
 let program := 
