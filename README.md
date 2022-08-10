@@ -5,7 +5,7 @@ Oxalc Example :
 * in a separate file called library.oxalc :
 ```fsharp
 let library := (reader) => 
-    let ** : Atom<List> -> Atom<Number> -> Atom<Number> = (h::t, n) => h * n in (*gets the head and multiply it by n*)
+    let ** : List -> Number -> Number= (h::t, n) => h * n in (*gets the head and multiply it by n*)
     let add-to-two := (n : Atom) => n + 2 in 
     reader
 end library 

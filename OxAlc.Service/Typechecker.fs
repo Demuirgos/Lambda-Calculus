@@ -17,6 +17,11 @@ module Typechecker
             } <?> "Arrow" |>> Arrow
         parseArrow <|> parseAtom
 
+    let rec addRange l ctx: TypingContext = 
+        match l with 
+        | [] -> ctx
+        | (Identifier(name), arg_t):: t -> addRange t (ctx.Add(name, arg_t))  
+    
     let rec typeof (ctx : TypingContext) term = 
         match term with 
         | Bind(Identifier(name), tipe, body, cont) -> 
@@ -38,9 +43,6 @@ module Typechecker
             then Ok ctx[name]
             else Error "Type error"
         | Function(in_vs, out_v) ->
-            let rec addRange l ctx: TypingContext = match l with 
-                | [] -> ctx
-                | (Identifier(name), arg_t):: t -> addRange t (ctx.Add(name, arg_t))  
             let ctx = addRange in_vs ctx
             match typeof ctx  out_v with 
             | Ok(out_t) -> 
@@ -61,4 +63,20 @@ module Typechecker
                     when in_t = t -> checkValidity (Ok out_t) ts
                 | _, (Error _):: _ | Error _, _ | _ -> Error "Type error"
             checkValidity func_t args_t
-        
+        | Compound(expr, binds) -> 
+            let rec typesList binds res = 
+                match binds with
+                | [] -> Ok res
+                | ((iden, id_t), body) :: t -> 
+                    match typeof ctx body with
+                    | Ok type_r when type_r = id_t -> typesList t ((iden, id_t)::res) 
+                    | _ -> Error "Type error"
+            let bindTypes = typesList binds []
+            match bindTypes with
+            | Ok binds_t -> 
+                let ctx = addRange binds_t ctx
+                typeof ctx expr
+            | _ -> Error "Type error" 
+
+
+        // Statement * ((Statement * Type) * Statement) list

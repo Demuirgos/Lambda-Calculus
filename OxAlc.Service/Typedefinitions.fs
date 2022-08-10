@@ -30,7 +30,7 @@ module Typedefinitions
         | Unary             of Operation * Statement
         | Binary            of Statement * Operation * Statement
         | Branch            of Statement * Statement * Statement
-        | Compound          of Statement * (Statement * Statement) list   
+        | Compound          of Statement * ((Statement * Type) * Statement) list   
         | Context           of Statement list * Statement
     and Literal =
         | Hole | True | False 

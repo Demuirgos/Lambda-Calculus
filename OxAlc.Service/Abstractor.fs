@@ -22,11 +22,11 @@ module Abstractor
                 } <?> "Binder" |>> ( mapper >> Bind )
         and parseCompound =
                 Parser {
-                    let [|consumeWhere; consumeEq; consumeAnd|] = [|"where"; ":="; "and"|] |> Array.map parserWord
+                    let [|consumeWhere; consumeTyper; consumeEq; consumeAnd|] = [|"where"; ":"; "="; "and"|] |> Array.map parserWord
                     let parseExpression =   choice [    
                                                 parseBrancher; parseFunction; parseBinary; parseOperation; parseValue; parseUnary; parseIdentifier    
                                             ] 
-                    let parseBinders = parseIdentifier .>> pSpaces  .>> consumeEq     .>> pSpaces .>>. parseExpression .>> option (pSpaces .>> consumeAnd .>> pSpaces )
+                    let parseBinders = parseIdentifier .>> pSpaces  .>> consumeTyper .>>. parseType .>> consumeEq .>> pSpaces .>>. parseExpression .>> option (pSpaces .>> consumeAnd .>> pSpaces )
                                         |> many 1
                     return! parseExpression .>> pSpaces .>> consumeWhere .>> pSpaces .>>. parseBinders  
                 } <?> "Binder" |>> Compound
@@ -225,8 +225,8 @@ module Abstractor
                             match binds with 
                             | [] -> emitLambda expr
                             | bind::binds ->
-                                let (id, value) = bind 
-                                Applicative(Lambda(emitLambda id, emitBinds binds), emitLambda value)
+                                let ((var, var_t), value) = bind 
+                                Applicative(Lambda(emitLambda var, emitBinds binds), emitLambda value)
                         emitBinds binds
                     | Function _ as f->
                         let emitFunction (Function([param], body)) = match param with 
