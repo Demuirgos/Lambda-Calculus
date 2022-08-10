@@ -1,50 +1,40 @@
 module Interpreter
     open Parsec
+    open Typedefinitions
     open FSharp.Core
     #nowarn "40"
 
-    type Expression = 
-        | Atom of string
-        | Applicative of Expression * Expression
-        | Lambda of Expression * Expression 
-    and Envirement = list<string * Expression>
-
     let acceptedChars = [yield! ['a'..'z']; yield! ['+';'-';'/';'*';'^';'|';'&';'=';'<';'>';'!']; '_']
     let parseExpr = 
-        let rec parseAtom =
+        let rec parseTerm =
             Parser {
-                let! atom = acceptedChars |> Seq.toList |> anyOf |> many 1 
-                return atom
-            } <?> "Atom" |>> (toString >> Atom)
+                return! acceptedChars |> Seq.toList |> anyOf |> many 1 
+            } <?> "Term" |>> (toString >> Term)
         and parseApp = 
             Parser {
                 let pParens p = between (expect '(') p (expect ')')
-                let! app = pParens ( parseExpression .>> pSpaces .>>. parseExpression )
-                return app 
+                return! pParens ( parseExpression .>> pSpaces .>>. parseExpression )
             } <?> "Applicative" |>> Applicative
         and parseLambda = 
             Parser {
                 let pLmbda = anyOf [ '\\'; 'λ']; 
                 let pDot = expect '.'
-                let! lmbda = pLmbda >>. parseAtom .>> pDot .>>. parseExpression 
-                return lmbda
+                return! pLmbda >>. parseTerm .>> pDot .>>. parseExpression
             } <?> "Lambda" |>> fun (param,body) -> Lambda (param ,body)
         and parseExpression  = 
             Parser {
-                let! expr = 
-                    choice [    
-                        parseAtom     
+                return! choice [    
+                        parseTerm     
                         parseApp        
                         parseLambda 
-                    ] 
-                return expr
+                    ]
             } <?> "Expression" 
         parseExpression
     
     let evalExpr input= 
         let rec occurs identifier = 
             function
-            | Atom id -> 
+            | Term id -> 
                 let isThere = id = identifier
                 (isThere, isThere)
             | Lambda (arg, body) -> 
@@ -58,8 +48,8 @@ module Interpreter
             let rec convert old rep expr = 
                 let convert' = convert old rep
                 match expr with 
-                | Atom(id) -> 
-                    if id = old then Atom rep
+                | Term(id) -> 
+                    if id = old then Term rep
                     else expr
                 | Applicative   (lhs, rhs)   -> Applicative (convert' lhs, convert' rhs)
                 | Lambda        (arg, body)  -> Lambda      (arg,convert' body)
@@ -67,7 +57,7 @@ module Interpreter
             | (true,_) -> 
                 Error (sprintf "New name '%A' already appears in %A" id lambda)
             | _ -> match lambda with 
-                    | Lambda (Atom(arg),body) -> Lambda (Atom(id), convert arg id body) |> Ok 
+                    | Lambda (Term(arg),body) -> Lambda (Term(id), convert arg id body) |> Ok 
                     | _ -> Error (sprintf "α-conversion not supported for %A" lambda)
         let (/>) = ``α Convert``
 
@@ -76,12 +66,12 @@ module Interpreter
                 let rec loop expr : seq<string> =
                     seq {
                         match expr with
-                            | Atom name -> yield name
+                            | Term name -> yield name
                             | Applicative (func, arg) ->
                                 yield! loop func
                                 yield! loop arg
                             | Lambda (param, body) ->
-                                yield match param with  | Atom(name) -> name 
+                                yield match param with  | Term(name) -> name 
                                                         | _ -> failwith "not a valid parameter for Lambda"
                                 yield! loop body
                     }
@@ -89,14 +79,14 @@ module Interpreter
             let rec substitute arg param body =
                 let substitute' = substitute arg param  
                 match body with
-                | Atom id ->
+                | Term id ->
                     if id = param then Ok arg
                     else Ok body 
                 | Applicative(fn, arg) -> 
                     match substitute' fn, substitute' arg  with 
                     | Ok(fn'), Ok(arg') ->  Ok (Applicative(fn',arg'))
                     | (Error(msg) ,_) | (_, Error (msg)) -> Error msg 
-                | Lambda(Atom(local), body') -> 
+                | Lambda(Term(local), body') -> 
                     if local = param then Ok body 
                     else 
                         let occurence = (local, arg)
@@ -116,11 +106,11 @@ module Interpreter
                             | _ -> Error "Exhausted variable names for α-conversion"
                         else
                             match substitute' body' with 
-                            | Ok body'' -> Lambda (Atom(local), body'') |> Ok
+                            | Ok body'' -> Lambda (Term(local), body'') |> Ok
                             | Error _ as error -> error
                 | _ -> Error "β-redex : Subtitution Failed"  
             function
-            | Applicative (Lambda (Atom(param), body), arg) ->
+            | Applicative (Lambda (Term(param), body), arg) ->
                 substitute arg param body
             | expression -> Error <| sprintf "%A is not a β-redex" expression
         let (</) () expr= ``β-redex`` expr
@@ -128,14 +118,14 @@ module Interpreter
         let evaluate expression = 
             let rec isBetaRedex = 
                 function
-                | Atom _ -> false
+                | Term _ -> false
                 | Applicative (Lambda(_), _) -> true
                 | Applicative (lhs, rhs) -> 
                     isBetaRedex lhs || isBetaRedex rhs
                 | Lambda (_, body) -> isBetaRedex body
             let rec reduce expr = 
                 match expr with 
-                | Atom _ -> Ok expr
+                | Term _ -> Ok expr
                 | Applicative (Lambda(_), _) -> 
                     () </ expr 
                 | Lambda (arg, body) ->
@@ -172,7 +162,7 @@ module Interpreter
             let rec toString term = 
                 match term with 
                 | Lambda(arg,body) -> sprintf "λ%s.%s" (toString arg) (toString body)
-                | Atom(v) -> sprintf "%s" v
+                | Term(v) -> sprintf "%s" v
                 | Applicative(lhs,rhs) -> sprintf "(%s %s)" (toString lhs) (toString rhs)
             toString v
         | Error e -> e

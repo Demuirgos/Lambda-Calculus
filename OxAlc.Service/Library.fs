@@ -17,7 +17,7 @@ let interpret = Interpreter.parse
                 
 let decompile = Interpreter.parse 
                 >> function
-                | Success (code, _) -> code |> Abstractor.uncompile |> (sprintf "%A")
+                // | Success (code, _) -> code |> Abstractor.uncompile |> (sprintf "%A")
                 | _ as error -> error |> toResult
                 
 let parse = 

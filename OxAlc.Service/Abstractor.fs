@@ -1,50 +1,25 @@
 module Abstractor 
     open Interpreter
+    open Typechecker
+    open Typedefinitions
     open Parsec
     open System.IO
     open System.Text.RegularExpressions
-    type Thunk = Interpreter.Expression 
-    type Statement = 
-        | Value             of Literal 
-        | Identifier        of string 
-        | Bind              of Statement * Statement * Statement 
-        | Function          of Parameter list * Statement 
-        | Application       of Statement * Statement list
-        | Unary             of Operation * Statement
-        | Binary            of Statement * Operation * Statement
-        | Branch            of Statement * Statement * Statement
-        | Compound          of Statement * (Statement * Statement) list   
-        | Context           of Statement list * Statement
-    and Literal =
-        | Hole | True | False 
-        | Variable of int 
-        | String of List<char> 
-        | List of List<Statement>  
-        | Record of Map<string,Statement>
-    and Parameter = 
-        | Argument of Statement | Pattern of Statement * Statement
-    and Operation   =   Cons |Add | Subs | Div | Mult | Exp | Or | And | Eq | Lt | Not | Xor | Gt | YComb | Custom of string
-                        static member toOp tokens =
-                            match tokens with 
-                            | ['*'] -> Mult  | ['/'] -> Div  | ['^'] -> Exp | ['+'] -> Add
-                            | ['&'] -> And   | ['|'] -> Or   | ['~'] -> Not | ['!'] -> Xor 
-                            | ['='] -> Eq    | ['<'] -> Lt   | ['>'] -> Gt  | ['-'] -> Subs
-                            | [ 'Y'] -> YComb | ['@'] -> Cons | _ -> Custom ( tokens |> List.map string |> String.concat "") 
-    and Backend = LCR | LLVM | MSIL
 
     let (|Comment|_|) pattern input =
         let regex = Regex.Match(input, pattern)
-        if regex.Success then Some([ for m in regex.Captures do m ])
+        if regex.Success then Some(Seq.toList regex.Captures)
         else None
 
     #nowarn "40"
     let parseExpr = 
         let rec parseLet topLevel =
+                let mapper = fun (((var, var_t),b),c) -> (var, var_t, b, c)
                 Parser {
-                    let [|consumeLet; consumeIn; consumeEnd; consumeEq|] = [|"let"; "in"; "end"; ":="|] |> Array.map parserWord
-                    return! consumeLet >>. pSpaces >>. parseIdentifier .>> pSpaces .>> consumeEq .>> pSpaces .>>. parseExpression
+                    let [|consumeLet; consumeIn; consumeEnd; consumeTyper;  consumeEq|] = [|"let"; "in"; "end"; ":"; "="|] |> Array.map parserWord
+                    return! consumeLet >>. pSpaces >>. parseIdentifier .>> pSpaces .>> consumeTyper .>>. parseType .>> consumeEq .>> pSpaces .>>. parseExpression
                                     .>>  pSpaces .>> (if topLevel then consumeEnd else consumeIn)  .>> pSpaces .>>. parseExpression
-                } <?> "Binder" |>> (fun ((a,b),c) -> (a,b,c) |> Bind)
+                } <?> "Binder" |>> ( mapper >> Bind )
         and parseCompound =
                 Parser {
                     let [|consumeWhere; consumeEq; consumeAnd|] = [|"where"; ":="; "and"|] |> Array.map parserWord
@@ -57,14 +32,16 @@ module Abstractor
                 } <?> "Binder" |>> Compound
         and parseBrancher =
             let parseTernary =
+                let mapper = fun ((c,t),f) -> (c,t,f)
                 Parser {
                     let [| consumeIf; consumeElse |] = [|'?'; ':'|] 
                                                         |>  Array.map expect
                     let pCondition = choice [parseUnary; parseBinary; parseOperation; parseValue; parseIdentifier]
                     return!  pCondition .>> pSpaces .>> consumeIf   .>> pSpaces .>>. parseExpression 
                                         .>> pSpaces .>> consumeElse .>> pSpaces .>>. parseExpression 
-                } |>> (fun ((c,t),f) -> (c,t,f) |> Branch)
+                } |>> ( mapper >> Branch)
             let parseIf = 
+                let mapper = fun ((c,t),f) -> (c,t,f)
                 Parser {
                     let [| consumeIf; consumeThen; consumeElse |] = [|"if"; "then"; "else"|] 
                                                                     |> Array.map parserWord
@@ -72,7 +49,7 @@ module Abstractor
                     return! consumeIf   >>. pSpaces  >>. pCondition      .>> pSpaces 
                         .>> consumeThen .>> pSpaces .>>. parseExpression .>> pSpaces 
                         .>> consumeElse .>> pSpaces .>>. parseExpression
-                } |>> (fun ((c,t),f) -> (c,t,f) |> Branch)
+                } |>> ( mapper >> Branch )
             (parseTernary <|> parseIf) <?> "Brancher" 
         and parseIdentifier = 
             (['a'..'z']@['+';'-';'/';'*';'^';'|';'&';'=';'<';'>';'!';'@']@['0'..'9']) 
@@ -113,16 +90,11 @@ module Abstractor
             parseSimple <|> parseList <|> parseString <|> parseHole
         and parseFunction  = 
             Parser {
-                let [pArrow ; consumeDec] = ["=>"; "::"] |> List.map parserWord
-                let pArg  = parseIdentifier 
-                            |>> Argument
-                let pPatt = parseIdentifier .>> pSpaces .>> consumeDec .>> pSpaces .>>. parseIdentifier
-                            |>>  Pattern
-                let mParam  = pPatt <|> pArg |>> List.singleton
+                let [pArrow ; consumeTyper] = ["=>"; ":"] |> List.map parserWord
+                let pArg  = parseIdentifier .>> consumeTyper .>>. parseType
                 let mParams =  ','  |> expect >>. pSpaces
-                                    |> separateBy 1 (pPatt <|> pArg)
+                                    |> separateBy 1  pArg
                                     |> betweenC ('(',')')
-                                <|> mParam
                 return! mParams .>> pSpaces .>> pArrow .>> pSpaces .>>. parseExpression
             } <?> "Function" |>> Function
         and parseUnary = 
@@ -158,6 +130,28 @@ module Abstractor
                 let [|consumeInclude; consumeFor|]  = [|"include"; "for"|]  |> Array.map parserWord
                 return! consumeInclude >>. pSpaces >>. parsefiles .>> pSpaces .>> consumeFor .>> pSpaces .>>. parseExpression
             } <?> "Include" |>> Context
+        and parseTypeDef = 
+            let rec parseType =  
+                let rec parseSum = 
+                    Parser {
+                        let pUnion = parserWord "|"
+                        return! parseType .>> pSpaces .>> pUnion .>> pSpaces .>>. parseType
+                    } <?> "Union" |>> Union
+                and parseMult = 
+                    Parser {
+                        let pIntersection = parserWord "&"
+                        return! parseType .>> pSpaces .>> pIntersection .>> pSpaces .>>. parseType  
+                    } <?> "Intersection" |>> Intersection
+                and parseExp = 
+                    Parser {
+                        let pExponent = parserWord "^"
+                        return! parseType .>> pSpaces .>> pExponent .>> pSpaces .>>. parseType  
+                    } <?> "Exponent" |>> Exponent
+                parseSum <|> parseMult <|> parseExp
+            Parser {        
+                let [typeDecl; consumeEq] = ["type"; "<="] |> List.map parserWord
+                return! typeDecl >>. pSpaces >>. parseIdentifier .>> pSpaces .>> consumeEq .>> pSpaces .>>. parseType
+            } <?> "Type Definition" |>> Typedefinition
         and parseExpression = 
             Parser {
                 let! expr = 
@@ -200,7 +194,7 @@ module Abstractor
             match Result with
             | Success (program,r) -> 
                 let toSyntaxTree = parse     >> (function Success(code,_) -> code) >> 
-                                interpret >> (function Ok (program)    -> program)
+                                   interpret >> (function Ok (program)    -> program)
                 let rec emitLambda= function
                     | Context(files, program) ->
                         let filesContents = files  |> List.map (function Identifier(path) 
@@ -216,15 +210,15 @@ module Abstractor
                         let rec wrapFiles filesAst program = 
                             match filesAst with 
                             | []   -> program
-                            | Bind(n, f, e)::t ->
-                                Bind(n, f, Application(n, [wrapFiles t program]))
+                            | Bind(n, _t , f, e)::t ->
+                                Bind(n, _t, f, Application(n, [wrapFiles t program]))
                         match all filesContents with
                         | Ok (Asts) ->   
                             let r = wrapFiles (Asts) program
                             printfn "%A" r
                             emitLambda r
                         | Error(msg) -> failwith msg
-                    | Bind(name, expr, value) ->
+                    | Bind(name,type_t,  expr, value) ->
                         Applicative(Lambda(emitLambda name, emitLambda value), emitLambda expr)
                     | Compound(expr, binds) as e -> 
                         let rec emitBinds binds = 
@@ -236,11 +230,7 @@ module Abstractor
                         emitBinds binds
                     | Function _ as f->
                         let emitFunction (Function([param], body)) = match param with 
-                            | Argument(a)    -> Lambda(emitLambda a, emitLambda body)
-                            | Pattern (h, t) as p ->
-                                let head = Lambda(Atom "_l", Applicative(Atom "_l", emitLambda(Value True )))
-                                let tail = Lambda(Atom "_l", Applicative(Atom "_l", emitLambda(Value False)))
-                                Lambda(Atom "_l", Applicative(Lambda(emitLambda h, Applicative(Lambda(emitLambda t, emitLambda body), Applicative(tail, Atom "_l"))), Applicative(head, Atom "_l")))
+                            | (n, t)    -> Lambda(emitLambda n, emitLambda body)
                         f |> curry |> emitFunction
                     | Application(expr, args) as a ->
                         let operation = emitLambda expr
@@ -248,7 +238,7 @@ module Abstractor
                             | [] -> op
                             | h::t -> wrap (Applicative(op, (emitLambda h))) t
                         wrap operation args
-                    | Identifier(name) -> Atom name
+                    | Identifier(name) -> Term name
                     | Unary(Op, rhs) -> 
                         match Op with 
                         | Not -> Applicative(Applicative(emitLambda rhs, emitLambda (Value False)), emitLambda (Value True))
@@ -259,11 +249,11 @@ module Abstractor
                     | Branch(cond,tClause, fClause) as t -> 
                         Applicative (Applicative(emitLambda cond, emitLambda tClause), emitLambda fClause)
                     | Binary(lhs, op, rhs) ->
-                        let isZero arg = Applicative(Applicative(arg,Lambda(Atom "_w", emitLambda (Value False))), emitLambda (Value True))
+                        let isZero arg = Applicative(Applicative(arg,Lambda(Term "_w", emitLambda (Value False))), emitLambda (Value True))
                         let predec = "\\_n.\\_f.\\_x.(((_n \\_g.\\_h.(_h (_g _f))) \\_u._x) \\_u._u)" |> toSyntaxTree
                         match op  with 
-                        | Add -> Lambda(Atom "_g", Lambda(Atom "_v", Applicative(Applicative(emitLambda lhs, Atom "_g"), Applicative(Applicative(emitLambda rhs, Atom "_g"), Atom "_v"))))
-                        | Mult-> Lambda(Atom "_g", Lambda(Atom "_v", Applicative(Applicative(emitLambda lhs, Applicative(emitLambda rhs, Atom "_g")), Atom "_v")))
+                        | Add -> Lambda(Term "_g", Lambda(Term "_v", Applicative(Applicative(emitLambda lhs, Term "_g"), Applicative(Applicative(emitLambda rhs, Term "_g"), Term "_v"))))
+                        | Mult-> Lambda(Term "_g", Lambda(Term "_v", Applicative(Applicative(emitLambda lhs, Applicative(emitLambda rhs, Term "_g")), Term "_v")))
                         | Exp -> Applicative(emitLambda rhs, emitLambda lhs)
                         | And -> Applicative(Applicative(emitLambda rhs, emitLambda lhs), emitLambda (Value False))
                         | Or  -> Applicative(Applicative(emitLambda rhs, emitLambda (Value False)), emitLambda lhs)
@@ -277,32 +267,32 @@ module Abstractor
                     | Value(var) -> 
                         match var with 
                         | List(elems)-> 
-                            let cons = Lambda(Atom "_h", Lambda(Atom "_t", Lambda(Atom "_s", Applicative(Applicative(Atom "_s", Atom "_h"), Atom "_t"))))
-                            let empty= Lambda(Atom "_l", Applicative(Atom "_l", Lambda(Atom "_h", Lambda(Atom "_t", emitLambda(Value False)))))
-                            let nil  = Lambda(Atom "_l", Applicative(Atom "_l", emitLambda(Value True )))
+                            let cons = Lambda(Term "_h", Lambda(Term "_t", Lambda(Term "_s", Applicative(Applicative(Term "_s", Term "_h"), Term "_t"))))
+                            let empty= Lambda(Term "_l", Applicative(Term "_l", Lambda(Term "_h", Lambda(Term "_t", emitLambda(Value False)))))
+                            let nil  = Lambda(Term "_l", Applicative(Term "_l", emitLambda(Value True )))
                             let rec emitList = function 
                                 | []   -> nil
                                 | h::t -> Applicative(Applicative(cons, emitLambda h), emitList t)
                             emitList elems
-                        | True -> Lambda(Atom "_a", Lambda(Atom "_b", Atom "_a"))
-                        | False -> Lambda(Atom "_a", Lambda(Atom "_b", Atom "_b"))
+                        | True -> Lambda(Term "_a", Lambda(Term "_b", Term "_a"))
+                        | False -> Lambda(Term "_a", Lambda(Term "_b", Term "_b"))
                         | Variable(var) ->
                             let funcn, varn = "_a", "_b"
                             let rec loop n = 
                                 match n with 
-                                | 0 -> Atom varn
-                                | _ -> Applicative(Atom funcn, (loop (n - 1)))
-                            Lambda(Atom funcn, Lambda(Atom varn, loop var))
+                                | 0 -> Term varn
+                                | _ -> Applicative(Term funcn, (loop (n - 1)))
+                            Lambda(Term funcn, Lambda(Term varn, loop var))
                         | _ as v -> failwithf "%A is not supported by Lambda-Calculus" v 
                 Success (emitLambda program, r)
             | Failure(l, e, idx) -> Failure(l,e,idx)
         | _ -> failwith "Backend not supported : Yet" 
 
-    let rec uncompile =
-        function 
-        | Applicative(f, args) -> Application(uncompile f, [uncompile args])
-        | Lambda(p, b) -> Function([Argument (uncompile p)], uncompile b)
-        | Atom(name) -> Identifier(name)
+    // let rec uncompile =
+    //     function 
+    //     | Applicative(f, args) -> Application(uncompile f, [uncompile args])
+    //     | Lambda(p, b) -> Function([(uncompile p)], uncompile b)
+    //     | Term(name) -> Identifier(name), Atom("Erased")
 
     let parse text = Parsec.Parser.run (fromStr text) parseExpr
 
