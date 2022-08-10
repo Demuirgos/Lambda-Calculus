@@ -37,7 +37,8 @@ module Typechecker
             if(ctx.ContainsKey(name)) 
             then Ok ctx[name]
             else Error "Type error"
-        | Function([(in_p, in_t)], out_v) -> 
+        | Function([(Identifier(name), in_t)], out_v) -> 
+            let ctx = ctx.Add(name, in_t)
             match typeof out_v ctx with 
             | Ok(out_t) -> Ok <| Arrow(in_t, out_t)
             | _ -> Error "Type error"
