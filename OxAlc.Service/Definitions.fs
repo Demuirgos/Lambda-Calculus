@@ -11,6 +11,13 @@ module Typedefinitions
     type Type = 
         | Atom of string
         | Arrow of param : Type * body  : Type
+        with override this.ToString() =
+            let rec print_type type_expr = 
+                match type_expr with
+                | Atom name -> name
+                | Arrow (left_node, right_node) -> 
+                    "(" + print_type left_node + " -> " + print_type right_node + ")"
+            print_type this
     and Type_t = 
         | Const of Type
         | Union of Type_t * Type_t
@@ -33,7 +40,8 @@ module Typedefinitions
         | Compound          of Statement * ((Statement * Type) * Statement) list   
         | Context           of Statement list * Statement
     and Literal =
-        | Hole | True | False 
+        | Hole 
+        | Bool of bool 
         | Variable of int 
         | String of List<char> 
         | List of List<Statement>  
