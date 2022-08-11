@@ -5,8 +5,8 @@ Oxalc Example :
 * in a separate file called library.oxalc :
 ```fsharp
 let library := (reader) => 
-    let ** : Atom<List> -> Atom<Number> -> Atom<Number> = (h::t, n) => h * n in (*gets the head and multiply it by n*)
-    let add-to-two := (n : Atom) => n + 2 in 
+    let ** : bool -> number -> number = (c:bool, n:number) => c ? n : 0 in (*if check is false it give 0*)
+    let add-to-two := (n : number) => n + 2 in 
     reader
 end library 
 ```
@@ -14,9 +14,9 @@ end library
 ```fsharp
 let program := 
     include [library] for 
-    let cst := x * f(x) where x : Atom = 3
-                        and f : Atom -> Atom = (n) => n - 2 in  
-    let value : Atom = add-to-two(5) in 
+    let cst := x * f(x) where x : number = 3
+                        and   f : number -> number = (n) => n - 2 in  
+    let value := add-to-two(5) in 
     if value > 5 ? value = 11 : false then    
         [23, 2, 3] ** 3
     else    

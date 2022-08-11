@@ -5,10 +5,11 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Parsec.fs" />
-    <Compile Include="Typedefinitions.fs" />
+    <Compile Include="Definitions.fs" />
     <Compile Include="Interpreter.fs" />
-    <Compile Include="Typechecker.fs" />
-    <Compile Include="Abstractor.fs" />
+    <Compile Include="Checker.fs" />
+    <Compile Include="Parser.fs" />
+    <Compile Include="Compiler.fs" />
     <Compile Include="Library.fs" />
   </ItemGroup>
 </Project>

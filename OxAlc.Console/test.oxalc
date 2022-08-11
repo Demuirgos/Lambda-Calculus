@@ -1,0 +1,6 @@
+let program :=
+    let x := (n:number) => 
+        if 1 > 2 then n 
+        else n + 1 in
+    x
+end program 

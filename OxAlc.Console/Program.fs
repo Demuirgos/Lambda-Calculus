@@ -1,8 +1,10 @@
 ﻿open System
 open System.IO
 open FSharp.Core
+open Typedefinitions
 open Interpreter
-open Abstractor
+open OxalcParser
+open OxalcCompiler
 
 type Mode = File of string | Terminal | Lambda
 [<EntryPoint>]
@@ -13,7 +15,7 @@ let REPL args =
         let read =  function
                     | File(path) -> fun () -> [yield! File.ReadLines(path)]
                                               |> String.concat "\n"
-                    | _ -> fun () -> "let program := " + Console.ReadLine() + " end program" 
+                    | _ -> fun () -> "let program : = " + Console.ReadLine() + " end program" 
         let eval mode = 
             let operation = match mode with 
                             | Lambda -> Interpreter.parse

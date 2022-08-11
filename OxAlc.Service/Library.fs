@@ -4,11 +4,12 @@ open System
 open System.IO
 open FSharp.Core
 open Interpreter
-open Abstractor
+open OxalcParser
+open OxalcCompiler
 
 type Mode = Lambda | Oxalc
 
-let transpile = Abstractor.transpile >> sprintf "%A"
+let transpile = OxalcCompiler.transpile >> sprintf "%A"
 
 let interpret = Interpreter.parse 
                 >> function
@@ -23,6 +24,6 @@ let decompile = Interpreter.parse
 let parse = 
     function
     | Lambda -> Interpreter.parse >> toResult
-    | Oxalc  -> Abstractor.parse  >> toResult
+    | Oxalc  -> OxalcParser.parse  >> toResult
 
 
