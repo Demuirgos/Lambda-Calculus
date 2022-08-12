@@ -18,6 +18,8 @@ module Parsec
     [<AutoOpen>]
     module State =
         type State = Input of (char list[] * Position)
+
+        let ``initial State`` =  Input ([||],``initial Position``)
         let fromStr str = 
             if String.length str = 0 then
                 Input ([||],``initial Position``)
@@ -50,34 +52,40 @@ module Parsec
                 Marker : Position
                 Line : char list Option
             }
+
+            let EmptyParserPosition = {
+                Marker = Cursor(0,0)
+                Line   = None
+            } 
+
             let fromState state= 
                 match state with 
                 | Input (_,position) ->
-                    {Marker = position; Line = currentLine state} 
+                    Some {Marker = position; Line = currentLine state} 
 
-        type Result<'a> =
-            | Success of 'a 
-            | Failure of label:string * message:ErrorMessage * location:ParserPosition
+        type ResultError = string * ErrorMessage * ParserPosition option
         type Parser<'a> = {
-            Function: (State -> Result<'a * State>)
+            Function: (State -> Result<'a, ResultError>)
             Label : string
         }
     
         let toResult result =
             match result with
-            | Success (value,_) -> 
+            | Ok (value,_) -> 
                 sprintf "%A" value
-            | Failure (label,error,cursor) -> 
+            | Error (label,error,Some cursor) -> 
                 let line, colPos,linePos = 
                     match cursor.Line,cursor.Marker with
                     | (Some l,Cursor (lin,col)) -> toString l,col,lin
-                    | (None  ,Cursor (lin,col)) -> "EOF"     ,col,lin
+                    | (None  ,Cursor (lin,col)) -> "\r"     ,col,lin
                 let caret = sprintf "%*s^ %s" colPos "" error
-                sprintf "Line:%i Col:%i Error parsing %s\n%s\n%s" linePos colPos label line caret 
+                sprintf "Line:%i Col:%i Syntax Error : %s {\n\t%s\n\t%s\n} " linePos colPos label line caret 
+            | Error (label,error,None) -> 
+                sprintf "Compiler Error : %s {\n\t%s\n} " label error 
         
         let getContent = 
             function
-            | Success (v,_) -> Some v
+            | Ok (v,_) -> Some v
             | _ -> None
 
         let ref p = lazy (p)  
@@ -87,18 +95,18 @@ module Parsec
         let bind f p =
             let innerProcess input = 
                 match run input p with
-                | Failure (label, msg, pos) -> Failure (label, msg, pos)
-                | Success(parsed, left) -> 
+                | Error (label, msg, pos) -> Error (label, msg, pos)
+                | Ok (parsed, left) -> 
                     run left (f parsed)   
             {Function = innerProcess; Label="unknown"}
         let (>>=) f p = bind p f
         
         let give result = 
             let innerProcess str = 
-                Success(result,str)
+                Ok (result,str)
             {Function=innerProcess; Label= sprintf "%A" result}
         
-        let empty state = Failure ("Empty", "pzero", fromState state) 
+        let empty state = Error ("Empty", "pzero", fromState state) 
         
         type ParserMonad() =
             member inline _.Return(x)  = give x
@@ -121,10 +129,9 @@ module Parsec
         let setLabel parser newLabel = 
             let innerProcess input = 
                 match parser.Function input with
-                | Success s ->
-                    Success s 
-                | Failure (_,err,pos) -> 
-                    Failure (newLabel,err,pos)  
+                | Ok _ as success -> success
+                | Error (_,err,pos) -> 
+                    Error (newLabel,err,pos)  
             {Function=innerProcess; Label=newLabel}
         let (<?>) = setLabel
             
@@ -134,9 +141,9 @@ module Parsec
             let innerProcess input =
                 let tail,head = next input 
                 match head with
-                | Some char when pred char -> Success (char, tail)
-                | Some char -> Failure (label,  sprintf "Unexpected '%c'" char, fromState input)
-                | _  -> Failure (label,  sprintf "Unexpected character", fromState input) 
+                | Some char when pred char -> Ok (char, tail)
+                | Some char -> Error (label,  sprintf "Unexpected '%c'" char, fromState input)
+                | _  -> Error (label,  sprintf "Unexpected character", fromState input) 
             {Function=innerProcess; Label=sprintf "satisfy %A" pred}
     [<AutoOpen>]
     module Primitives =             
@@ -145,7 +152,7 @@ module Parsec
         let orElse parser1 parser2  = 
             let innerProcess str= 
                 match run str parser1 with
-                | Success(parsed,left) -> Success(parsed,left)
+                | Ok _ as success-> success
                 | _ -> run str parser2 
             {Function=innerProcess; Label=sprintf "%s orElsa %s" (parser1.Label) (parser2.Label)}
         let (<|>) = orElse
@@ -195,8 +202,8 @@ module Parsec
 
         let tryWith parser word = 
             match run word parser with
-            | Success (parsed,left)   -> Success (parsed,left)
-            | Failure (lbl, msg, pos) -> Failure (lbl, msg, pos)
+            | Ok (parsed,left)  as success -> success
+            | Error (lbl, msg, pos) as error -> error 
         let (/>?) word parser = tryWith parser word
 
         let keepParsing offset parser =
@@ -209,14 +216,14 @@ module Parsec
                     seq |> sequence
                 let rec loop input parser =
                     match run input parser with
-                    | Success (firstValue,inputAfterFirstParse) ->
+                    | Ok (firstValue,inputAfterFirstParse) ->
                         let (subsequentValues,remainingInput) = loop inputAfterFirstParse parser
                         let values = firstValue::subsequentValues
                         (values,remainingInput)
                     | _ -> ([],input)
                 match run input initialParser with 
-                | Failure (label, msg, pos) when offset <> 0 -> Failure (label, msg, pos)
-                | _ -> Success (loop input parser)
+                | Error (label, msg, pos) when offset <> 0 -> Error (label, msg, pos)
+                | _ -> Ok (loop input parser)
             {Function = innerProcess; Label = sprintf "%s{%d,}" parser.Label offset}
         let many n parser = keepParsing n parser
                 
@@ -246,9 +253,9 @@ module Parsec
             let innerProcess input= 
                 match next input with
                 | (_,Some c) when c <> '\n' -> 
-                    Failure ("EOF","Expected EOF Token", fromState input)
+                    Error ("EOF","Expected EOF Token", fromState input)
                 | _ -> 
-                    Success(fromStr "",input)
+                    Ok (fromStr "",input)
             {Function = innerProcess; Label = "EOF"}
     [<AutoOpen>]
     module Predefined = 

@@ -29,13 +29,13 @@ module OxalcCompiler
             let parseExp arg = (fromStr arg, parseExpr) ||> run 
             let Result = parseExp input
             match Result with
-            | Success (program,r) -> 
+            | Ok (program,r) -> 
                 let typeResult = TypeOf Map.empty program 
                 match typeResult with
                 | Ok(expr_type) -> 
                     printf "val it : %s = " (expr_type.ToString())
-                    let toSyntaxTree =  Interpreter.parse     >> (function Success(code,_) -> code) >> 
-                                        Interpreter.interpret >> (function Ok (program)    -> program)
+                    let toSyntaxTree =  Interpreter.parse     >> (function Ok (code,_)   -> code) >> 
+                                        Interpreter.interpret >> (function Ok (program)  -> program)
                     let rec emitLambda= function
                         | Context(files, program) ->
                             let filesContents = files  |> List.map (function Identifier(path) 
@@ -45,7 +45,7 @@ module OxalcCompiler
                             let all xs = 
                                 let folder = fun state next -> 
                                     match (state, next) with 
-                                    | (Ok ys, Success (n, s)) -> ys |> List.append [ n ] |> Ok
+                                    | (Ok ys, Ok (n, s)) -> ys |> List.append [ n ] |> Ok
                                     | _  -> Error "File import Failed"
                                 Seq.fold folder (Ok []) xs
                             let rec wrapFiles filesAst program = 
@@ -127,7 +127,7 @@ module OxalcCompiler
                                     | _ -> Applicative(Term funcn, (loop (n - 1)))
                                 Lambda(Term funcn, Lambda(Term varn, loop var))
                             | _ as v -> failwithf "%A is not supported by Lambda-Calculus" v 
-                    Success (emitLambda program, r)
-                | Error(msg) -> failwith msg
-            | Failure(l, e, idx) -> Failure(l,e,idx)
-        | _ -> failwith "Backend not supported : Yet" 
+                    Ok (emitLambda program, ``initial State``)
+                | Error(msg) -> Error("Type Error", msg, None)
+            | Error(l, e, idx) as errorCase-> Error(l, e, idx) 
+        | _ -> Error("Compiler Error", "Backend not supported : Yet", None)  

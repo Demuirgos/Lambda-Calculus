@@ -21,7 +21,7 @@ let REPL args =
                             | Lambda -> Interpreter.parse
                             | _ ->  transpile LCR
             operation >> function 
-                | Success(code,_) -> code |> (interpret >> toString)
+                | Ok (code,_) -> code |> (interpret >> toString)
                 | error-> error |> toResult
         let print= 
             function 
