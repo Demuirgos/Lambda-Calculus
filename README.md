@@ -5,10 +5,10 @@ Oxalc Example :
 * in a separate file called library.oxalc :
 ```fsharp
 let library := { 
-        **    := (c:bool, n:number) => c ? n : 0 ; (*if check is false it give 0*)
+        **    := (c:bool, n:number) => c ? n : 0; (*if check is false it give 0*)
         incr  := (n : number) => n + 1;
         zero  : number = 0;
-        false : bool = 1 
+        boolF : bool = false 
     }
 end library  
 ```
