@@ -39,13 +39,14 @@ module Typedefinitions
         | Branch            of Statement * Statement * Statement
         | Compound          of Statement * ((Statement * Type) * Statement) list   
         | Context           of Statement list * Statement
+        | Library           of (Statement * Type * Statement) list
     and Literal =
         | Hole 
         | Bool of bool 
         | Variable of int 
         | String of List<char> 
         | List of List<Statement>  
-        | Record of Map<string,Statement>
+        | Record of (Statement * Statement) list
     and Operation   =   Cons |Add | Subs | Div | Mult | Exp | Or | And | Eq | Lt | Not | Xor | Gt | YComb | Custom of string
                         static member toOp tokens =
                             match tokens with 

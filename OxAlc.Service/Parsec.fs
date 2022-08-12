@@ -243,8 +243,10 @@ module Parsec
             lhs .>>. rhs
             |> map (fun (_,b) -> b)
 
-        let between left parser right = 
-            left >>. parser .>> right
+        let between left parser right separator=
+            match separator with
+            | None -> left >>. parser .>> right
+            | Some sep -> left >>. sep >>. parser .>> sep .>> right 
 
         let separateBy minCount parser separator =
             many minCount (separator |> option >>. parser )
@@ -262,4 +264,4 @@ module Parsec
         let parseWord str = str |> List.ofSeq |> allOf
         let pSpaces = many 0 (anyOf ['\n'; '\r';  ' '; '\t'])
         let cleanStr s = s |> String.filter (function | ' ' | '\n' -> false | _ -> true)
-        let betweenC (s,f) p = between (expect s) p (expect f)
+        let betweenC (s, f) p = between (expect s) p (expect f) (Some pSpaces)

@@ -12,7 +12,7 @@ module Interpreter
             } <?> "Term" |>> (toString >> Term)
         and parseApp = 
             Parser {
-                let pParens p = between (expect '(') p (expect ')')
+                let pParens p = betweenC ('(', ')') p
                 return! pParens ( parseExpression .>> pSpaces .>>. parseExpression )
             } <?> "Applicative" |>> Applicative
         and parseLambda = 

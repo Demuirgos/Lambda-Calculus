@@ -116,6 +116,7 @@ module Typechecker
                     else Error (sprintf "Undefined binary operation %s" symbol)
                 | _ -> Error "Unsupported binary operation"
             | Error msg, _ | _, Error msg -> Error msg 
+        | Context (stmts, program) -> TypeOf ctx program
 
 
         // Statement * ((Statement * Type) * Statement) list
