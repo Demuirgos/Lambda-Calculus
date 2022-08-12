@@ -6,7 +6,9 @@ Oxalc Example :
 ```fsharp
 let library := { 
         ** := (c:bool, n:number) => c ? n : 0 ; (*if check is false it give 0*)
-        add-to-two := (n : number) => n + 2 
+        incr := (n : number) => n + 2;
+        zero := 0;
+        one  := 1 
     }
 end library  
 ```
