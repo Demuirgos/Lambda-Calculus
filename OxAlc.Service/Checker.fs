@@ -1,5 +1,6 @@
 module Typechecker 
 
+    open System
     open Parsec
     open Typedefinitions
     open System.IO
@@ -13,14 +14,15 @@ module Typechecker
     let rec TypeOf (ctx : TypingContext) term = 
         match term with 
         | Bind(Identifier(name), suggested_type, body, cont) -> 
-            let ctx = ctx.Add(name, suggested_type)
             let bodyType = TypeOf ctx body 
             match bodyType with
             | Ok(term_t) 
-                when term_t = suggested_type || suggested_type = Atom "" ->
-                    if suggested_type = Atom "" 
-                    then TypeOf (ctx.Add(name, term_t)) cont 
-                    else TypeOf ctx cont
+                when term_t = suggested_type || suggested_type = Atom String.Empty ->
+                    let ctx = 
+                        if suggested_type = Atom String.Empty
+                        then ctx.Add(name, term_t) 
+                        else ctx.Add(name, suggested_type)
+                    TypeOf ctx cont
             | Ok(term_t) -> Error (sprintf "Type mismatch in bind : expected type %s but given type %s" (suggested_type.ToString()) (term_t.ToString())) 
             | error -> error 
         | Branch(_cond, _then, _else) -> 
@@ -67,7 +69,7 @@ module Typechecker
                 | [] -> Ok res
                 | ((iden, id_t), body) :: t -> 
                     match TypeOf ctx body with
-                    | Ok type_r when type_r = id_t -> typesList t ((iden, id_t)::res) 
+                    | Ok type_r when type_r = id_t || id_t = Atom "" -> typesList t ((iden, type_r)::res) 
                     | Ok type_r -> Error (sprintf "Type mismatch in compound : expected type %s but given type %s" (id_t.ToString()) (type_r.ToString()))
                     | Error err -> Error err
             let bindTypes = typesList binds []
