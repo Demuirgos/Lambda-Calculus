@@ -45,28 +45,17 @@ module OxalcParser
                     return! parseExpression .>> pSpaces .>> consumeWhere .>> pSpaces .>>. parseBinders  
                 } <?> "Binder" |>> Compound
         and parseBrancher =
-            let parseTernary =
-                let mapper = fun ((c,t),f) -> (c,t,f)
-                Parser {
-                    let [| consumeIf; consumeElse |] = [|'?'; ':'|] 
-                                                        |>  Array.map expect
-                    let pCondition = choice [parseUnary; parseBinary; parseOperation; parseValue; parseIdentifier]
-                    return!  pCondition .>> pSpaces .>> consumeIf   .>> pSpaces .>>. parseExpression 
-                                        .>> pSpaces .>> consumeElse .>> pSpaces .>>. parseExpression 
-                } |>> ( mapper >> Branch)
-            let parseIf = 
-                let mapper = fun ((c,t),f) -> (c,t,f)
-                Parser {
-                    let [| consumeIf; consumeThen; consumeElse |] = [|"if"; "then"; "else"|] 
-                                                                    |> Array.map parseWord
-                    let pCondition = choice [parseTernary; parseUnary; parseBinary; parseOperation; parseValue; parseIdentifier]
-                    return! consumeIf   >>. pSpaces  >>. pCondition      .>> pSpaces 
-                        .>> consumeThen .>> pSpaces .>>. parseExpression .>> pSpaces 
-                        .>> consumeElse .>> pSpaces .>>. parseExpression
-                } |>> ( mapper >> Branch )
-            (parseTernary <|> parseIf) <?> "Brancher" 
+            let mapper = fun ((c,t),f) -> (c,t,f)
+            Parser {
+                let [| consumeIf; consumeThen; consumeElse |] = [|"if"; "then"; "else"|] 
+                                                                |> Array.map parseWord
+                let pCondition = choice [parseUnary; parseBinary; parseOperation; parseValue; parseIdentifier]
+                return! consumeIf   >>. pSpaces  >>. pCondition      .>> pSpaces 
+                    .>> consumeThen .>> pSpaces .>>. parseExpression .>> pSpaces 
+                    .>> consumeElse .>> pSpaces .>>. parseExpression
+            } |>> ( mapper >> Branch )  <?> "Brancher" 
         and parseIdentifier = 
-            (['a'..'z']@['+';'-';'/';'*';'^';'|';'&';'=';'<';'>';'!';'@']@['0'..'9']) 
+            '_'::printable
             |> Seq.toList 
             |> anyOf |> many 1 
             <?> "Identifier" |>> (toString >> Identifier)
@@ -75,7 +64,7 @@ module OxalcParser
                 Parser {
                     let [| parseT ; parseF |] = [| "true" ;"false"|] 
                                                 |> Array.map parseWord
-                    let parseV     = ['0'..'9'] |> Seq.toList |> anyOf |> many 1
+                    let parseV     = digits |> Seq.toList |> anyOf |> many 1
                     return! choice [
                         parseT; parseF; parseV
                     ]
@@ -85,28 +74,24 @@ module OxalcParser
                                                                                     | _ as i -> i |> int |> Variable |> Value)
             and parseList = 
                 Parser {
-                    let pElems= pSpaces >>.  (',' |> expect) >>. pSpaces
+                    let pElems= (pSpaces >>.  (',' |> expect) >>. pSpaces)
                                     |> separateBy 0 parseExpression
                                     |> betweenC ('[', ']')
                     return! pElems
                 } <?> "List Expr" |>> (List >> Value) 
             and parseString =
                 Parser {
-                    let validChars = ([' ']@['a'..'z']@['+';'-';'/';'*';'^';'|';'&';'=';'<';'>';'!';'@']@['0'..'9']) 
+                    let validChars = (' ' :: printable) 
                     return! validChars 
                                 |> anyOf |> many 0
                                 |> betweenC ('"', '"') 
                 } <?> "String Expr" |>> (String >> Value)
-            and parseHole = 
-                Parser {
-                    return! expect '?' |> many 1
-                } <?> "Hole Expr" |>> (fun _ -> Hole |> Value)
-            parseSimple <|> parseList <|> parseString <|> parseHole
+            parseSimple <|> parseList <|> parseString
         and parseFunction  = 
             Parser {
                 let [pArrow ; consumeTyper] = ["=>"; ":"] |> List.map parseWord
                 let pArg  = parseIdentifier .>> consumeTyper .>>. parseType
-                let mParams =  pSpaces >>. (','  |> expect) >>. pSpaces
+                let mParams =  (pSpaces >>. (','  |> expect) >>. pSpaces)
                                     |> separateBy 1  pArg
                                     |> betweenC ('(', ')')
                 return! mParams .>> pSpaces .>> pArrow .>> pSpaces .>>. parseExpression
@@ -122,7 +107,7 @@ module OxalcParser
             } <?> "Unary" |>>  Unary
         and parseOperation  = 
             Parser {
-                let pArgs=  pSpaces >>. (',' |> expect) >>. pSpaces
+                let pArgs=  (pSpaces >>. (',' |> expect) >>. pSpaces)
                                 |> separateBy 1 parseExpression
                                 |> betweenC ('(', ')') 
                 return! parseIdentifier .>>. pArgs
@@ -131,14 +116,14 @@ module OxalcParser
             Parser {
                 let operand =   (betweenC ('(', ')') parseBinary)   
                                 <|> choice [ parseUnary; parseOperation; parseValue; parseIdentifier] 
-                let binOper =   ['+';'-';'/';'*';'^';'|';'&';'=';'<';'>';'!';'@'] 
+                let binOper = symbols
                                 |> anyOf |> many 1 
                                 |>> Operation.toOp
                 return! operand .>>  pSpaces .>>. binOper .>> pSpaces .>>. operand
             } <?> "Binary Term" |>> (fun ((lhs,op),rhs) -> (lhs,op,rhs) |> Binary)
         and parseInclude =
             Parser {
-                let parsefiles = pSpaces >>. (',' |> expect) >>. pSpaces
+                let parsefiles = (pSpaces >>. (',' |> expect) >>. pSpaces)
                                 |> separateBy 0 parseIdentifier
                                 |> betweenC ('[', ']')
                 let [|consumeInclude; consumeFor|]  = [|"include"; "for"|]  |> Array.map parseWord
@@ -172,11 +157,11 @@ module OxalcParser
                 Parser {
                     let [|consumeTyper;  consumeEq|] = [|":"; "="|] |> Array.map parseWord
                     let pKey = parseIdentifier
-                    let pValue = parseValue <|> parseFunction 
+                    let pValue = parseValue <|> parseFunction <|> (parseLet false) 
                     return! pKey .>> pSpaces .>> consumeTyper .>> pSpaces .>>. parseType .>> pSpaces .>> consumeEq .>> pSpaces .>>. pValue
                 }
             Parser {
-                return! pSpaces >>. (expect ';') >>. pSpaces
+                return! (pSpaces >>. (expect ';') >>. pSpaces)
                             |> separateBy 1 parseMapping
                             |> betweenC ('{', '}')
             } <?> "Library" |>> ((List.map mapper) >> Library)

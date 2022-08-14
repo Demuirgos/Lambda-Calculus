@@ -260,8 +260,18 @@ module Parsec
                     Ok (fromStr "",input)
             {Function = innerProcess; Label = "EOF"}
     [<AutoOpen>]
+    module CharactersCats = 
+        let alphabets = ['a'..'z']
+        let digits = ['0'..'9']
+        let alphanumeric = alphabets @ digits
+        let whitespaces = [' ';'\t';'\n';'\r']
+        let symbols = ['!';'#';'$';'%';'&';'*';'+';'-';'.';'/';'<';'=';'>';'?';'@';'\\';'^';'|';'~']
+        let printable = alphanumeric @ symbols
+        let special = symbols @ whitespaces
+
+    [<AutoOpen>]
     module Predefined = 
         let parseWord str = str |> List.ofSeq |> allOf
-        let pSpaces = many 0 (anyOf ['\n'; '\r';  ' '; '\t'])
+        let pSpaces = many 0 (anyOf whitespaces)
         let cleanStr s = s |> String.filter (function | ' ' | '\n' -> false | _ -> true)
         let betweenC (s, f) p = between (expect s) p (expect f) (Some pSpaces)
