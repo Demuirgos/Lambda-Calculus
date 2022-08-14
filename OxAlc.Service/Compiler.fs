@@ -38,26 +38,21 @@ module OxalcCompiler
                             match files with
                             | [] -> Ok program
                             | _  ->  
-                                let filesContents paths = paths  |> List.map ( function 
-                                                                                                Identifier(path) ->path, 
-                                                                                                                            path 
-                                                                                                                            |> (sprintf "%s.oxalc") 
-                                                                                                                            |> File.ReadAllText 
-                                                                                                                            |> parseExp)
-                                let all xs = 
+                                let filesContents = List.map ( function Identifier(path) -> path, path |> ((sprintf "%s.oxalc") >> File.ReadAllText >> parseExp))
+                                let all = 
                                     let folder = fun state (file, next) -> 
                                         match (state, next) with 
                                         | (Ok ys, Ok (n, _)) -> ys @ [n] |> Ok
                                         | Error errAcc, Error errNew  -> Error (errNew::errAcc)
                                         | Error _ as error, _ -> error 
                                         | _, Error err  -> Error [err]
-                                    Seq.fold folder (Ok []) xs
+                                    Seq.fold folder (Ok []) 
 
                                 let rec injectFields fields p= 
-                                            match fields with 
-                                            | (fd_id, fd_t, fd_body)::t -> 
-                                                Bind(fd_id, fd_t, fd_body, injectFields t p)
-                                            | _ -> p
+                                    match fields with 
+                                    | (fd_id, fd_t, fd_body)::t -> 
+                                        Bind(fd_id, fd_t, fd_body, injectFields t p)
+                                    | _ -> p
 
                                 let rec wrapFiles filesAst program = 
                                     match filesAst with 
@@ -78,7 +73,6 @@ module OxalcCompiler
                                 | Error err -> Error err
                         match program with
                         | Ok program -> 
-                            printfn "%A" program
                             let typeResult = TypeOf Map.empty program 
                             match typeResult with
                             | Ok(expr_type) -> 
