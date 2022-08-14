@@ -41,7 +41,6 @@ module Typedefinitions
         | Context           of Statement list * Statement
         | Library           of (Statement * Type * Statement) list
     and Literal =
-        | Hole 
         | Bool of bool 
         | Variable of int 
         | String of List<char> 
@@ -53,5 +52,5 @@ module Typedefinitions
                             | ['*'] -> Mult  | ['/'] -> Div  | ['^'] -> Exp | ['+'] -> Add
                             | ['&'] -> And   | ['|'] -> Or   | ['~'] -> Not | ['!'] -> Xor 
                             | ['='] -> Eq    | ['<'] -> Lt   | ['>'] -> Gt  | ['-'] -> Subs
-                            | [ 'Y'] -> YComb | ['@'] -> Cons | _ -> Custom ( tokens |> List.map string |> String.concat "") 
+                            | ['Y'] -> YComb | ['@'] -> Cons | _ -> Custom ( tokens |> List.map string |> String.concat "") 
     type Backend = LCR | LLVM | MSIL
