@@ -36,18 +36,21 @@ module OxalcCompiler
                     | Context(files, program) ->
                         let program = 
                             match files with
-                            | [] -> program
+                            | [] -> Ok program
                             | _  ->  
                                 let filesContents paths = paths  |> List.map ( function 
-                                                                                                Identifier(path) -> path 
+                                                                                                Identifier(path) ->path, 
+                                                                                                                            path 
                                                                                                                             |> (sprintf "%s.oxalc") 
                                                                                                                             |> File.ReadAllText 
                                                                                                                             |> parseExp)
                                 let all xs = 
-                                    let folder = fun state next -> 
+                                    let folder = fun state (file, next) -> 
                                         match (state, next) with 
-                                        | (Ok ys, Ok (n, s)) -> ys |> List.append [ n ] |> Ok
-                                        | Error err, _ | _, Error err  -> Error err
+                                        | (Ok ys, Ok (n, _)) -> ys @ [n] |> Ok
+                                        | Error errAcc, Error errNew  -> Error (errNew::errAcc)
+                                        | Error _ as error, _ -> error 
+                                        | _, Error err  -> Error [err]
                                     Seq.fold folder (Ok []) xs
 
                                 let rec injectFields fields p= 
@@ -63,33 +66,39 @@ module OxalcCompiler
                                         let dependenciesContent = all (filesContents dependencies)
                                         match dependenciesContent with
                                         | Ok ds -> 
-                                            match wrapFiles ds program with
-                                            | Ok result -> wrapFiles t (injectFields fields result)
+                                            match wrapFiles ds (injectFields fields program) with
+                                            | Ok result -> wrapFiles t result
                                             | Error err -> Error err
-                                        | Error(_,msg,_) -> Error msg
+                                        | Error msg -> Error msg
                                     | Bind(_, _ , Library(fields), _)::t ->
                                         wrapFiles t (injectFields fields program)
-                                    | _ -> Error "Invalid file structure"
+                                    | _ -> Error [("Import Error","Invalid file structure", None)]
                                 match all (filesContents files) with
-                                | Ok (Asts)-> 
-                                    match wrapFiles (Asts) program with
-                                    | Ok program -> program
-                                    | Error err -> failwith err
-                                | Error(_,msg,_) -> failwith msg
-                        let typeResult = TypeOf Map.empty program 
-                        match typeResult with
-                        | Ok(expr_type) -> 
-                            printf "val it : %s = " (expr_type.ToString())
-                            emitLambda program
-                        | Error(msg) -> failwith msg
-                    | Bind(name,type_t,  expr, value) ->
+                                | Ok (Asts)-> wrapFiles (Asts) program 
+                                | Error err -> Error err
+                        match program with
+                        | Ok program -> 
+                            printfn "%A" program
+                            let typeResult = TypeOf Map.empty program 
+                            match typeResult with
+                            | Ok(expr_type) -> 
+                                printf "val it : %s = " (expr_type.ToString())
+                                emitLambda program
+                            | Error msg -> failwith msg
+                        | Error msgs -> 
+                            let rec msgAcc msgs = 
+                                match msgs with
+                                | [(label, msg, _)] -> sprintf "%s: %s" label msg
+                                | (label, msg, _)::errs -> 
+                                    sprintf "%s: %s \n%s" label msg (msgAcc errs)
+                            failwith (msgAcc msgs)
+                    | Bind(name,_,  expr, value) ->
                         Applicative(Lambda(emitLambda name, emitLambda value), emitLambda expr)
                     | Compound(expr, binds) as e -> 
                         let rec emitBinds binds = 
                             match binds with 
                             | [] -> emitLambda expr
-                            | bind::binds ->
-                                let ((var, var_t), value) = bind 
+                            | ((var, _), value) ::binds ->
                                 Applicative(Lambda(emitLambda var, emitBinds binds), emitLambda value)
                         emitBinds binds
                     | Function _ as f->
