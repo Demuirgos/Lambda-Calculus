@@ -38,29 +38,44 @@ module OxalcCompiler
                             match files with
                             | [] -> program
                             | _  ->  
-                                let filesContents = files  |> List.map (function Identifier(path) 
-                                                                                                            -> path |> (sprintf "%s.oxalc") 
-                                                                                                                    |> File.ReadAllText 
-                                                                                                                    |> parseExp)
+                                let filesContents paths = paths  |> List.map ( function 
+                                                                                                Identifier(path) -> path 
+                                                                                                                            |> (sprintf "%s.oxalc") 
+                                                                                                                            |> File.ReadAllText 
+                                                                                                                            |> parseExp)
                                 let all xs = 
                                     let folder = fun state next -> 
                                         match (state, next) with 
                                         | (Ok ys, Ok (n, s)) -> ys |> List.append [ n ] |> Ok
                                         | Error err, _ | _, Error err  -> Error err
                                     Seq.fold folder (Ok []) xs
-                                let rec wrapFiles filesAst program = 
-                                    match filesAst with 
-                                    | []   -> program
-                                    | Bind(libName, _t , Library(fields), _)::t ->
-                                        let rec injectFields fields= 
+
+                                let rec injectFields fields p= 
                                             match fields with 
                                             | (fd_id, fd_t, fd_body)::t -> 
-                                                Bind(fd_id, fd_t, fd_body, injectFields t)
-                                            | _ -> program
-                                        injectFields fields
-                                match all filesContents with
-                                | Ok (Asts) -> wrapFiles (Asts) program
-                                | Error((_,msg,_)) -> failwith msg
+                                                Bind(fd_id, fd_t, fd_body, injectFields t p)
+                                            | _ -> p
+
+                                let rec wrapFiles filesAst program = 
+                                    match filesAst with 
+                                    | []   -> Ok program
+                                    | Bind(_, _ , Context(dependencies, Library(fields)), _)::t ->
+                                        let dependenciesContent = all (filesContents dependencies)
+                                        match dependenciesContent with
+                                        | Ok ds -> 
+                                            match wrapFiles ds program with
+                                            | Ok result -> wrapFiles t (injectFields fields result)
+                                            | Error err -> Error err
+                                        | Error(_,msg,_) -> Error msg
+                                    | Bind(_, _ , Library(fields), _)::t ->
+                                        wrapFiles t (injectFields fields program)
+                                    | _ -> Error "Invalid file structure"
+                                match all (filesContents files) with
+                                | Ok (Asts)-> 
+                                    match wrapFiles (Asts) program with
+                                    | Ok program -> program
+                                    | Error err -> failwith err
+                                | Error(_,msg,_) -> failwith msg
                         let typeResult = TypeOf Map.empty program 
                         match typeResult with
                         | Ok(expr_type) -> 
