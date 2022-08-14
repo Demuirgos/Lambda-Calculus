@@ -38,10 +38,10 @@ let program :=
     include [constants, operators] for
     let value := f(num) where num := zero 
                         and f := incr in 
-    value
+    ++(value) == 2
 end program 
 ```
 this program yields the following result : 
 ```
-val it : number = λ_a.λ_b._a
+val it : bool = λ_a.λ_b._a
 ```
