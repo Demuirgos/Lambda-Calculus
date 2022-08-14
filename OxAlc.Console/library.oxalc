@@ -1,6 +1,0 @@
-let library := { 
-        **   := (c:bool, n:number) => c ? n : 0; 
-        incr := (n:number) => n + 1;
-        zero := 0
-    }
-end library  

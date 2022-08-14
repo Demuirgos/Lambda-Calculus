@@ -1,0 +1,4 @@
+let bible := { 
+        zero : number = 0
+    }
+end bible 

@@ -1,5 +1,5 @@
 let program := 
     include [library] for 
-    let value := incr(0) in 
+    let value := incr(n) where n := 0 in 
     zero
 end program 
