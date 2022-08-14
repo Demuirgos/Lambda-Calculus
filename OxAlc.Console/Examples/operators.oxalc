@@ -1,0 +1,7 @@
+let operators := 
+    include [functions] for {
+        ++    := (n:number) => incr(n);
+        ??    := (b:bool, n:number) => null(b, n);
+        ==    := (n:number, m:number) => (n = m) ?? 1
+    }
+end operators

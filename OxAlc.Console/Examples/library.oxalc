@@ -1,5 +1,0 @@
-let library := 
-    include [standard, bible] for { 
-        **   := (c:bool, n:number) => c ? n : 0
-    }
-end library  

@@ -1,0 +1,7 @@
+let constants := {
+        zero  : number = 0;
+        one   : number = 1;
+        bool_t : bool = true;
+        bool_f : bool = false 
+    }
+end constants 

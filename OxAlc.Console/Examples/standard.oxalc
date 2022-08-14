@@ -1,4 +1,0 @@
-let standard := { 
-        incr := (n:number) => n + 1
-    }
-end standard 

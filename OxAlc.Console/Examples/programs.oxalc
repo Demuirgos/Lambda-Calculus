@@ -1,0 +1,6 @@
+let program := 
+    include [constants, operators] for
+    let value := f(num) where num := zero 
+                        and f := incr in 
+    value
+end program 
