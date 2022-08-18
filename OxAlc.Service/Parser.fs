@@ -106,12 +106,15 @@ module OxalcParser
                 return! uniOper .>> pSpaces .>>. uniExpr
             } <?> "Unary" |>>  Unary
         and parseOperation  = 
-            Parser {
-                let pArgs=  (pSpaces >>. (',' |> expect) >>. pSpaces)
-                                |> separateBy 1 parseExpression
-                                |> betweenC ('(', ')') 
-                return! parseIdentifier .>>. pArgs
-            } <?> "Applicative" |>> Application
+            let legacyParser = 
+                Parser {
+                    let pArgs=  (pSpaces >>. (',' |> expect) >>. pSpaces)
+                                    |> separateBy 1 parseExpression
+                                    |> betweenC ('(', ')') 
+                    let pOpr = parseIdentifier <|> (betweenC ('(', ')') parseExpression)
+                    return! pOpr .>>. pArgs
+                } 
+            (legacyParser) <?> "Applicative" |>> Application
         and parseBinary  = 
             Parser {
                 let operand =   (betweenC ('(', ')') parseBinary)   
@@ -143,7 +146,7 @@ module OxalcParser
                     } <?> "Intersection" |>> Intersection
                 and parseExp = 
                     Parser {
-                        let pExponent = parseWord "^"
+                        let pExponent = parseWord "->"
                         return! parseType .>> pSpaces .>> pExponent .>> pSpaces .>>. parseType  
                     } <?> "Exponent" |>> Exponent
                 parseSum <|> parseMult <|> parseExp
