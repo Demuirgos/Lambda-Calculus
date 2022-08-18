@@ -46,11 +46,12 @@ module Typedefinitions
         | String of List<char> 
         | List of List<Statement>  
         | Record of (Statement * Statement) list
-    and Operation   =   Cons |Add | Subs | Div | Mult | Exp | Or | And | Eq | Lt | Not | Xor | Gt | YComb | Custom of string
+    and Operation   =   Cons | Add | Subs | Div | Mult | Exp | Or | And | Eq | Neq | Lt | Not | Xor | Gt | YComb | Custom of string
                         static member toOp tokens =
                             match tokens with 
                             | ['*'] -> Mult  | ['/'] -> Div  | ['^'] -> Exp | ['+'] -> Add
                             | ['&'] -> And   | ['|'] -> Or   | ['~'] -> Not | ['!'] -> Xor 
                             | ['='] -> Eq    | ['<'] -> Lt   | ['>'] -> Gt  | ['-'] -> Subs
-                            | ['Y'] -> YComb | ['@'] -> Cons | _ -> Custom ( tokens |> List.map string |> String.concat "") 
+                            | ['Y'] -> YComb | ['@'] -> Cons | ['#'] -> Neq  
+                            | _ -> Custom ( tokens |> List.map string |> String.concat "") 
     type Backend = LCR | LLVM | MSIL

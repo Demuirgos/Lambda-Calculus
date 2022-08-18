@@ -5,7 +5,8 @@ module OxalcParser
     open Typedefinitions
     open System.Text.RegularExpressions
 
-    let (|Comment|_|) pattern input =
+    let (|Comment|_|) input =
+        let pattern = "\(\*.*?\*\)" 
         let regex = Regex.Match(input, pattern)
         if regex.Success then Some(Seq.toList regex.Captures)
         else None

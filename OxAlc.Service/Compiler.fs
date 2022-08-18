@@ -13,7 +13,7 @@ module OxalcCompiler
         | LCR -> 
             let input = 
                 match rawInput with 
-                | Comment "\(\*.*?\*\)" comments ->
+                | Comment(comments) ->
                     let rec removeComments (str:string) (comments: Capture list) =  
                         match comments with
                         | [] -> str
