@@ -42,7 +42,7 @@ let program :=
     let value1 := num |> f where num := zero 
                            and f := incr in 
     let value2 := apply((n:number) => n + 2, 0) in
-    value1 <> value2
+    ?(value1 <> value2)
 end program 
 ```
 this program yields the following result : 
