@@ -2,6 +2,7 @@ let functions := {
         null  := (b:bool, n:number) => if b then n else 0;  
         incr  := (n:number) => n + 1;
         decr  := (n:number) => n - 1;
-        check := (pred:number->bool, n:number) => null(pred(n), 1)
+        check := (pred:number->bool, n:number) => null(pred(n), 1);
+        apply := (f:number->number, n:number) => f(n)
     }
 end functions

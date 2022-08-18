@@ -1,6 +1,7 @@
 let program := 
     include [constants, operators] for
-    let value := f(num) where num := zero 
-                        and f := incr in 
-    ++(value) == 2
+    let value1 := num |> f where num := zero 
+                           and f := incr in 
+    let value2 := apply((n:number) => n + 2, 0) in
+    value1 <> value2
 end program 
