@@ -9,7 +9,7 @@ open OxalcCompiler
 type Mode = File of string | Terminal | Lambda
 [<EntryPoint>]
 let REPL args =
-    let execute mode= 
+    let execute mode backend= 
         Console.OutputEncoding <- Text.Encoding.Unicode
         let prefix = "λ >"
         let read =  function
@@ -19,9 +19,13 @@ let REPL args =
         let eval mode = 
             let operation = match mode with 
                             | Lambda -> Interpreter.parse
-                            | _ ->  transpile LCR
+                            | _ ->  transpile backend
             operation >> function 
-                | Ok (code,_) -> code |> (interpret >> toString)
+                | Ok (codeResult,_) -> 
+                    match codeResult with 
+                    | LCRR(code) -> code |> (interpret >> toString)
+                    | JSR(code) -> code 
+                    | _ -> "Invalid program"
                 | error-> error |> toResult
         let print= 
             function 
@@ -35,7 +39,7 @@ let REPL args =
                               | _ -> Terminal )
         loop mode prefix
     match args with 
-    | [||]         -> execute <| Terminal
-    | [|"-lambda"|]-> execute <| Lambda
-    | [|"-path";p|]-> execute <| File(p)
+    | [||]         -> execute Terminal LCR
+    | [|"--mode"; "lambda"|]-> execute Lambda LCR
+    | [|"--path"; path; "--backend"; target|]-> execute (File(path)) (Backend.Parse target)
     | _            -> failwith "Usage: Can Only Run 1 File at a time"

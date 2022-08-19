@@ -4,6 +4,7 @@ open System
 open System.IO
 open FSharp.Core
 open Interpreter
+open Typedefinitions
 open OxalcParser
 open OxalcCompiler
 
@@ -13,7 +14,7 @@ let transpile = OxalcCompiler.transpile >> sprintf "%A"
 
 let interpret = Interpreter.parse 
                 >> function
-                | Ok (code, _) -> code |> Interpreter.interpret |> sprintf "%A"
+                | Ok (LCRR(code), _) -> code |> Interpreter.interpret |> sprintf "%A"
                 | _ as error -> error |> toResult
                 
 let decompile = Interpreter.parse 

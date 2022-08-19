@@ -167,5 +167,8 @@ module Interpreter
             toString v
         | Error e -> e
 
-    let parse txt = (fromStr txt, parseExpr .>> eof) ||> run 
+    let parse txt = 
+        match (fromStr txt, parseExpr .>> eof) ||> run with 
+        | Ok (v, s) -> Ok (LCRR(v), s)
+        | Error e -> Error e
     let interpret (code: Expression) = code |> evalExpr
