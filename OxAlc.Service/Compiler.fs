@@ -259,7 +259,7 @@ module OxalcCompiler
                         | _ -> failwith "Not Implemented" 
                     sprintf "%s%s" (opToString Op) (emitJavascript rhs) 
                 | Branch(cond,tClause, fClause) as (t: Statement) -> 
-                    sprintf "((thenb, elseb) => (%s) ? thenb() : elseb())(() => %s,() => %s)" (emitJavascript cond) (emitJavascript tClause) (emitJavascript fClause)
+                    sprintf "((%s) ? (() => %s) : (() => %s))()" (emitJavascript cond) (emitJavascript tClause) (emitJavascript fClause)
                 | Binary(lhs, Op, rhs) ->
                     let opToString op = 
                         match op with 
@@ -277,7 +277,7 @@ module OxalcCompiler
                         | _ -> failwith "Not Implemented" 
                     match opToString Op with
                     | Ok op -> sprintf "%s %s %s" (emitJavascript lhs) op (emitJavascript rhs)
-                    | Error op -> sprintf "%s(%s, %s)" (emitJavascript(Identifier op)) (emitJavascript lhs) (emitJavascript rhs)
+                    | Error op -> sprintf "%s(%s)(%s)" (emitJavascript(Identifier op)) (emitJavascript lhs) (emitJavascript rhs)
                 | Value(var) -> 
                     let varToString = match var with 
                         | Variable(n) -> n.ToString()
