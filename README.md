@@ -5,10 +5,10 @@ Oxalc Example :
  * in a separate file called functions.oxalc :
 ```fs
 let functions := {
-        null  := (b:bool, n:number) => if b then n else 0;  
+        cond  := (b:bool, n:number, m:number) => if b then n else m;  
         incr  := (n:number) => n + 1;
         decr  := (n:number) => n - 1;
-        check := (pred:number->bool, n:number) => null(pred(n), 1);
+        check := (pred:number->bool, n:number) => cond(pred(n), 1, 0);
         apply := (f:number->number, n:number) => f(n)
     }
 end functions
@@ -28,9 +28,10 @@ end constants
 let operators := 
     include [functions] for {
         ++    := (n:number) => incr(n);
-        ??    := (b:bool, n:number) => null(b, n);
-        ==    := (n:number, m:number) => (n = m) ?? 1;
-        <>    := (n:number, m:number) => (n = m) ?? 0;
+        ??    := (b:bool, n:number, m:number) => cond(b, n, m);
+        ==    := (n:number, m:number) => ((n = m) ?? 1)(0);
+        <>    := (n:number, m:number) => ((n = m) ?? 0)(1);
+        ?    := (n:number) => if n = 0 then false else true;
         |>    := (m:number, f:number->number) => f(m)
     }
 end operators
