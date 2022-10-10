@@ -56,16 +56,18 @@ module Typedefinitions
                             | _ -> Custom ( tokens |> List.map string |> String.concat "") 
     
     type Backend = 
-        LCR | LLVM | MSIL | JS
+        LCR | LLVM | MSIL | JS | EVM
         static member Parse str = 
             match str with 
             | "LCR" -> LCR
             | "LLVM" -> LLVM
             | "MSIL" -> MSIL
             | "JS" -> JS
+            | "EVM" -> EVM
             | _ -> failwith "Unknown backend"
     and  Result = 
         | LCRR  of Expression
         | JSR   of string
         | LLVMR of string
         | MSILR of string
+        | EVM   of string

@@ -207,8 +207,9 @@ module OxalcCompiler
                             | (label, msg, _)::errs -> 
                                 sprintf "%s: %s \n%s" label msg (msgAcc errs)
                         failwith (msgAcc msgs)
-                | Bind(name,_,  expr, value) ->
-                    sprintf "((%s) => %s)(%s)" (emitJavascript name) (emitJavascript value) (emitJavascript expr)
+                | Bind(name,_,  expr, value) when value <> name ->
+                    sprintf "((%s)=>%s)(%s)" (emitJavascript name) (emitJavascript value) (emitJavascript expr)
+                | Bind(name,_,  expr, value) when value = name -> emitJavascript expr
                 | Compound(expr, binds) as e -> 
                     let rec hoistBinds binds =
                         match binds with 
@@ -218,12 +219,12 @@ module OxalcCompiler
                 | Function _ as f->
                     match curry f with
                     | Function([(arg, _)], body) -> 
-                        sprintf "(%s) => %s" (emitJavascript arg) (emitJavascript body) 
+                        sprintf "(%s)=>%s" (emitJavascript arg) (emitJavascript body) 
                 | Application(expr, args) as a ->
                     let rec prepareArgs params = 
                         params 
                         |> List.map (fun p -> sprintf "(%s)" (emitJavascript p))
-                        |> List.fold (fun acc p -> sprintf "%s %s" acc p) ""
+                        |> List.fold (fun acc p -> sprintf "%s%s" acc p) ""
                     sprintf "%s%s" (emitJavascript expr) (prepareArgs args)
                 | Identifier(name) ->
                     let replaceSpecialCharacters c = 
@@ -259,7 +260,7 @@ module OxalcCompiler
                         | _ -> failwith "Not Implemented" 
                     sprintf "%s%s" (opToString Op) (emitJavascript rhs) 
                 | Branch(cond,tClause, fClause) as (t: Statement) -> 
-                    sprintf "((%s) ? (() => %s) : (() => %s))()" (emitJavascript cond) (emitJavascript tClause) (emitJavascript fClause)
+                    sprintf "((%s)?(()=>%s):(()=>%s))()" (emitJavascript cond) (emitJavascript tClause) (emitJavascript fClause)
                 | Binary(lhs, Op, rhs) ->
                     let opToString op = 
                         match op with 
@@ -276,7 +277,7 @@ module OxalcCompiler
                         | Custom op -> Error op
                         | _ -> failwith "Not Implemented" 
                     match opToString Op with
-                    | Ok op -> sprintf "%s %s %s" (emitJavascript lhs) op (emitJavascript rhs)
+                    | Ok op -> sprintf "%s%s%s" (emitJavascript lhs) op (emitJavascript rhs)
                     | Error op -> sprintf "%s(%s)(%s)" (emitJavascript(Identifier op)) (emitJavascript lhs) (emitJavascript rhs)
                 | Value(var) -> 
                     let varToString = match var with 

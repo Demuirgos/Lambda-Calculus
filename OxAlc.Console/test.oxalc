@@ -1,0 +1,5 @@
+let program :=
+    include [] for
+    let ?? := (n:number,m:number,k:number) => n in
+    23 ?? 42
+end program
