@@ -55,6 +55,24 @@ module Typedefinitions
                             | ['Y'] -> YComb | ['@'] -> Cons | ['#'] -> Neq  
                             | _ -> Custom ( tokens |> List.map string |> String.concat "") 
     
+    let rec sprintOxalcAST OxalCAST = 
+        let formatArgList args  =
+            let rec loop params acc =  
+                match  params with 
+                | [] -> acc
+                | h::t when String.length acc = 0 -> loop t h
+                | h::t when String.length acc > 0 -> loop t (sprintf "%s, %s" acc h)
+            loop (args |> List.map sprintOxalcAST) ""
+        match OxalCAST with 
+        | Identifier name -> name
+        | Application (action, args) -> 
+            sprintf "%s(%s)" (sprintOxalcAST action) (formatArgList args)
+        | Bind (name, _, value, cont) -> 
+            sprintf "let %s := %s in %s" (sprintOxalcAST name) (sprintOxalcAST value) (sprintOxalcAST cont) 
+        | Function (params, body) ->
+            sprintf "(%s) => (%s)" (params |> List.map (fun (name, _) -> name) |> formatArgList ) (sprintOxalcAST body)
+        | _ -> failwith "not done yet"
+
     type Backend = 
         LCR | LLVM | MSIL | JS | EVM
         static member Parse str = 
@@ -70,4 +88,4 @@ module Typedefinitions
         | JSR   of string
         | LLVMR of string
         | MSILR of string
-        | EVM   of string
+        | EVMR  of string

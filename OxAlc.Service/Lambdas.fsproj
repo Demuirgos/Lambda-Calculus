@@ -9,8 +9,11 @@
     <Compile Include="Interpreter.fs" />
     <Compile Include="Checker.fs" />
     <Compile Include="Parser.fs" />
-    <Compile Include="Generator1.fs" />
-    <Compile Include="Generator2.fs" />
+    <Compile Include="LCLGenerator.fs" />
+    <Compile Include="EVMGenerator.fs" />
+    <Compile Include="CLRGenerator.fs" />
+    <Compile Include="WEBGenerator.fs" />
+    <Compile Include="LCLDecompiler.fs" />
     <Compile Include="Compiler.fs" />
     <Compile Include="Library.fs" />
   </ItemGroup>
