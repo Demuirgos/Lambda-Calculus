@@ -134,27 +134,47 @@ module OxalcParser
                 return! consumeInclude >>. pSpaces >>. parsefiles .>> pSpaces .>> consumeFor .>> pSpaces .>>. parseExpression
             } <?> "Include" |>> Context
         and parseTypeDef = 
-            let rec parseType =  
-                let rec parseSum = 
+            let rec parseAlgebraicType =  
+                let rec parseUnit = 
+                    parseType <?> "Atom" |>> Const
+                and parseSum = 
                     Parser {
                         let pUnion = parseWord "|"
-                        return! parseType .>> pSpaces .>> pUnion .>> pSpaces .>>. parseType
-                    } <?> "Union" |>> Union
+                        let parseRhs = 
+                            pUnion >>. pSpaces >>. parseAlgebraicType
+                            |> many 1
+                        return! parseUnit .>> pSpaces .>>. parseRhs
+                    } <?> "Union" |>> fun res -> Union(fst res :: snd res)
                 and parseMult = 
                     Parser {
                         let pIntersection = parseWord "&"
-                        return! parseType .>> pSpaces .>> pIntersection .>> pSpaces .>>. parseType  
-                    } <?> "Intersection" |>> Intersection
+                        let parseRhs = 
+                            pIntersection >>. pSpaces >>. parseAlgebraicType
+                            |> many 1
+                        return! parseUnit .>> pSpaces .>>. parseRhs
+                    } <?> "Intersection" |>> fun res -> Intersection(fst res :: snd res)
                 and parseExp = 
                     Parser {
                         let pExponent = parseWord "->"
-                        return! parseType .>> pSpaces .>> pExponent .>> pSpaces .>>. parseType  
-                    } <?> "Exponent" |>> Exponent
-                parseSum <|> parseMult <|> parseExp
+                        let parseRhs = 
+                            pExponent .>> pSpaces >>. parseAlgebraicType  
+                            |> many 1
+                        return! parseUnit.>> pSpaces .>>. parseRhs
+                    } <?> "Exponent" |>> fun res -> Exponent(fst res :: snd res)
+                and parseStruct = 
+                    Parser {
+                        let (pOpenCurly, pDoublePts ,pCloseCurly, pSemicolon) =  (parseWord "{", parseWord ":", parseWord "}", parseWord ";")
+                        let parseField = parseIdentifier .>> pSpaces .>> pDoublePts .>> pSpaces .>>. parseType .>> pSpaces .>> pSemicolon
+                        let parseFields = many 1 parseField
+                        let pStructDef = pOpenCurly >>. pSpaces >>. parseFields .>> pSpaces .>> pCloseCurly
+                        return! pStructDef
+                    } <?> "Struct" |>> (Map.ofList >> Struct)
+                parseStruct <|> parseSum <|> parseMult <|> parseExp <|> parseUnit 
             Parser {        
-                let [typeDecl; consumeEq] = ["type"; "<="] |> List.map parseWord
-                return! typeDecl >>. pSpaces >>. parseIdentifier .>> pSpaces .>> consumeEq .>> pSpaces .>>. parseType
-            } <?> "Type Definition" |>> Typedefinition
+                let [typeDecl; consumeEq] = ["type"; "="] |> List.map parseWord
+                let! result = typeDecl >>. pSpaces >>. parseIdentifier .>> pSpaces .>> consumeEq .>> pSpaces .>>. parseAlgebraicType
+                return result
+            } <?> "Type Definition" |>> TypeDefinition
         and parseLibrary = 
             let mapper = fun ((a,b),c) -> (a,b,c)
             let parseMapping = 
@@ -172,6 +192,7 @@ module OxalcParser
         and parseExpression = 
             Parser {
                 return! [
+                    parseTypeDef
                     parseLibrary
                     parseBrancher
                     parseInclude    

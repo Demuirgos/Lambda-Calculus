@@ -25,6 +25,7 @@ module OxalcCompiler
             | _ -> failwith "Expression cannot be curried"
         let parseExp arg = (fromStr arg, parseExpr) ||> run 
         let Result = parseExp input
+        printfn "%A" Result
         match backend, Result with 
         | LCR, Ok (program,r)-> 
             let toSyntaxTree =  Interpreter.parse     >> (function Ok (LCRR(code),_)   -> code) >> 
@@ -150,6 +151,7 @@ module OxalcCompiler
                             | _ -> Applicative(Term funcn, (loop (n - 1)))
                         Lambda(Term funcn, Lambda(Term varn, loop var))
                     | _ as v -> failwithf "%A is not supported by Lambda-Calculus" v 
+                | TypeDefinition _ -> failwith "Not Implemented or Not Compilable"
                 | _  -> failwith "Not Implemented or Not Compilable"
             Ok (LCRR(emitLambda program), ``initial State``)
         | JS, Ok (program,r) -> 

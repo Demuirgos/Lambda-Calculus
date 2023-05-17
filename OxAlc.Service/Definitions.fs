@@ -20,12 +20,13 @@ module Typedefinitions
             print_type this
     and Type_t = 
         | Const of Type
-        | Union of Type_t * Type_t
-        | Intersection of Type_t * Type_t
-        | Exponent of Type_t * Type_t
+        | Union of Type_t list
+        | Intersection of Type_t list
+        | Exponent of Type_t list
+        | Struct of Map<Statement, Type>
     and TypingContext = Map<string, Type>
     
-    type Statement = 
+    and Statement = 
         (* Primitive Constructs*)
         | Value             of Literal 
         | Function          of (Statement * Type) list * Statement 
@@ -33,7 +34,7 @@ module Typedefinitions
         (* Derivative Constructs*)
         | Identifier        of string 
         | Bind              of Statement * Type * Statement * Statement 
-        | Typedefinition    of Statement * Type_t
+        | TypeDefinition    of Statement * Type_t
         | Unary             of Operation * Statement
         | Binary            of Statement * Operation * Statement
         | Branch            of Statement * Statement * Statement

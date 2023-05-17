@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.33627.172
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Lambdas", "OxAlc.Service\Lambdas.fsproj", "{D0DC5AB6-E9DC-44FD-9092-5810030CD3F2}"
+EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "OxAlc.Console", "OxAlc.Console\OxAlc.Console.fsproj", "{93701FDB-F614-4FBC-B339-F6B10258D196}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D0DC5AB6-E9DC-44FD-9092-5810030CD3F2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D0DC5AB6-E9DC-44FD-9092-5810030CD3F2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D0DC5AB6-E9DC-44FD-9092-5810030CD3F2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D0DC5AB6-E9DC-44FD-9092-5810030CD3F2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{93701FDB-F614-4FBC-B339-F6B10258D196}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{93701FDB-F614-4FBC-B339-F6B10258D196}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{93701FDB-F614-4FBC-B339-F6B10258D196}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{93701FDB-F614-4FBC-B339-F6B10258D196}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {29D6F82F-1300-4546-A969-EBFCF087B715}
+	EndGlobalSection
+EndGlobal

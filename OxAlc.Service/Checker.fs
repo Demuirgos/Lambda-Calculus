@@ -119,6 +119,7 @@ module Typechecker
                 | _ -> Error "Unsupported binary operation"
             | Error msg, _ | _, Error msg -> Error msg 
         | Context (stmts, program) -> TypeOf ctx program
+        | TypeDefinition _ -> Ok (Atom "unit")
 
 
         // Statement * ((Statement * Type) * Statement) list
