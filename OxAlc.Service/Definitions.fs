@@ -11,6 +11,7 @@ module Typedefinitions
     type Type = 
         | Atom of string
         | Arrow of param : Type * body  : Type
+        | Custom of Type_t
         with override this.ToString() =
             let rec print_type type_expr = 
                 match type_expr with
@@ -34,7 +35,7 @@ module Typedefinitions
         (* Derivative Constructs*)
         | Identifier        of string 
         | Bind              of Statement * Type * Statement * Statement 
-        | TypeDefinition    of Statement * Type_t
+        | TypeDefinition    of Statement * Type_t * Statement
         | Unary             of Operation * Statement
         | Binary            of Statement * Operation * Statement
         | Branch            of Statement * Statement * Statement

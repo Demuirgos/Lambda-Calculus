@@ -119,7 +119,7 @@ module Typechecker
                 | _ -> Error "Unsupported binary operation"
             | Error msg, _ | _, Error msg -> Error msg 
         | Context (stmts, program) -> TypeOf ctx program
-        | TypeDefinition _ -> Ok (Atom "unit")
+        | TypeDefinition(Identifier(typeName), type_t, cont) -> TypeOf (Map.add typeName (Type.Custom type_t) ctx) cont
 
 
         // Statement * ((Statement * Type) * Statement) list

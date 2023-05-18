@@ -32,7 +32,7 @@ module OxalcParser
                 let mapper = fun (((var, var_t),b),c) -> (var, var_t, b, c)
                 Parser {
                     let [|consumeLet; consumeIn; consumeEnd; consumeTyper;  consumeEq|] = [|"let"; "in"; "end"; ":"; "="|] |> Array.map parseWord
-                    return! consumeLet >>. pSpaces >>. parseIdentifier .>> pSpaces .>> consumeTyper .>>. parseType .>> consumeEq .>> pSpaces .>>. parseExpression
+                    return! consumeLet >>. pSpaces >>. parseIdentifier .>> pSpaces .>> consumeTyper .>> pSpaces .>>. parseType .>> pSpaces .>> consumeEq .>> pSpaces .>>. parseExpression
                                       .>>  pSpaces .>> (if topLevel then consumeEnd else consumeIn) .>>  pSpaces   .>>. parseExpression
                 } <?> "Binder" |>> ( mapper >> Bind )
         and parseCompound =
@@ -139,7 +139,8 @@ module OxalcParser
                     parseType <?> "Atom" |>> Const
                 and parseSum = 
                     Parser {
-                        let pUnion = parseWord "|"
+                        let (pUnion, pColon) = (parseWord "|", parseWord ":")
+                        // let pUnit = parseUnit .>>. option (pColon >>. parseExp)
                         let parseRhs = 
                             pUnion >>. pSpaces >>. parseAlgebraicType
                             |> many 1
@@ -164,17 +165,17 @@ module OxalcParser
                 and parseStruct = 
                     Parser {
                         let (pOpenCurly, pDoublePts ,pCloseCurly, pSemicolon) =  (parseWord "{", parseWord ":", parseWord "}", parseWord ";")
-                        let parseField = parseIdentifier .>> pSpaces .>> pDoublePts .>> pSpaces .>>. parseType .>> pSpaces .>> pSemicolon
+                        let parseField = parseIdentifier .>> pSpaces .>> pDoublePts .>> pSpaces .>>. parseType .>> pSpaces .>> pSemicolon .>> pSpaces
                         let parseFields = many 1 parseField
                         let pStructDef = pOpenCurly >>. pSpaces >>. parseFields .>> pSpaces .>> pCloseCurly
                         return! pStructDef
                     } <?> "Struct" |>> (Map.ofList >> Struct)
                 parseStruct <|> parseSum <|> parseMult <|> parseExp <|> parseUnit 
             Parser {        
-                let [typeDecl; consumeEq] = ["type"; "="] |> List.map parseWord
-                let! result = typeDecl >>. pSpaces >>. parseIdentifier .>> pSpaces .>> consumeEq .>> pSpaces .>>. parseAlgebraicType
+                let [typeDecl; consumeEq; parseIn] = ["type"; "="; "in"] |> List.map parseWord
+                let! result = typeDecl >>. pSpaces >>. parseIdentifier .>> pSpaces .>> consumeEq .>> pSpaces .>>. parseAlgebraicType .>> pSpaces .>> (option parseIn) .>> pSpaces .>>. parseExpression
                 return result
-            } <?> "Type Definition" |>> TypeDefinition
+            } <?> "Type Definition" |>> fun ((iden, typeValue), cont) -> TypeDefinition(iden, typeValue, cont)
         and parseLibrary = 
             let mapper = fun ((a,b),c) -> (a,b,c)
             let parseMapping = 
