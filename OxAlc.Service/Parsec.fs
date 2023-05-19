@@ -268,6 +268,7 @@ module Parsec
         let symbols = ['!';'#';'$';'%';'&';'*';'+';'-';'.';'/';'<';'=';'>';'?';'@';'\\';'^';'|';'~']
         let printable = alphanumeric @ symbols
         let special = symbols @ whitespaces
+        let forName = '_'::alphabets
 
     [<AutoOpen>]
     module Predefined = 

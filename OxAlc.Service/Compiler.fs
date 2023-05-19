@@ -55,7 +55,7 @@ module OxalcCompiler
                             let rec wrapFiles filesAst program = 
                                 match filesAst with 
                                 | []   -> Ok program
-                                | Bind(_, _ , Context(dependencies, Library(fields)), _)::t ->
+                                | Bind(_, _ , Context(dependencies, Value(Record(fields))), _)::t ->
                                     let dependenciesContent = all (filesContents dependencies)
                                     match dependenciesContent with
                                     | Ok ds -> 
@@ -63,7 +63,7 @@ module OxalcCompiler
                                         | Ok result -> wrapFiles t result
                                         | Error err -> Error err
                                     | Error msg -> Error msg
-                                | Bind(_, _ , Library(fields), _)::t ->
+                                | Bind(_, _ , Value(Record(fields)), _)::t ->
                                     wrapFiles t (injectFields fields program)
                                 | _ -> Error [("Import Error","Invalid file structure", None)]
                             match all (filesContents files) with
@@ -180,7 +180,7 @@ module OxalcCompiler
                             let rec wrapFiles filesAst program = 
                                 match filesAst with 
                                 | []   -> Ok program
-                                | Bind(_, _ , Context(dependencies, Library(fields)), _)::t ->
+                                | Bind(_, _ , Context(dependencies, Value(Record(fields))), _)::t ->
                                     let dependenciesContent = all (filesContents dependencies)
                                     match dependenciesContent with
                                     | Ok ds -> 
@@ -188,7 +188,7 @@ module OxalcCompiler
                                         | Ok result -> wrapFiles t result
                                         | Error err -> Error err
                                     | Error msg -> Error msg
-                                | Bind(_, _ , Library(fields), _)::t ->
+                                | Bind(_, _ , Value(Record(fields)), _)::t ->
                                     wrapFiles t (injectFields fields program)
                                 | _ -> Error [("Import Error","Invalid file structure", None)]
                             match all (filesContents files) with
@@ -289,7 +289,7 @@ module OxalcCompiler
                             let rec fieldsToString fields = 
                                 match fields with 
                                 | [] -> System.String.Empty
-                                | ((name, value)::t) -> sprintf "%s: %s,\n%s" (emitJavascript name) (emitJavascript value) (fieldsToString t)
+                                | ((name, _, value)::t) -> sprintf "%s: %s,\n%s" (emitJavascript name) (emitJavascript value) (fieldsToString t)
                                 | _ -> failwith "Not Implemented" 
                             sprintf "{%s}" (fieldsToString fields)
                         | _ -> failwith "Not Implemented"

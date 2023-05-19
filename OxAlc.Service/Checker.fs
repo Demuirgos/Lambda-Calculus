@@ -46,8 +46,8 @@ module Typechecker
                 let rec constructType res = 
                     function
                     | [] -> Error "Function expects at least one argument"
-                    | [(_, arg_t)] -> Ok (Arrow(arg_t, res))
-                    | (_, arg_t):: t ->  constructType (Arrow(arg_t, res)) t
+                    | [(_, arg_t)] -> Ok (Exponent(arg_t, res))
+                    | (_, arg_t):: t ->  constructType (Exponent(arg_t, res)) t
                 in_vs |> List.rev |> constructType out_t
             | error -> error
         | Application(func, args)  -> 
@@ -56,9 +56,9 @@ module Typechecker
             let rec checkValidity func args = 
                 match func, args with
                 | Ok t , [] -> Ok (t)
-                | Ok (Arrow(in_t, out_t)), (Ok t):: ts 
+                | Ok (Exponent(in_t, out_t)), (Ok t):: ts 
                     when in_t = t -> checkValidity (Ok out_t) ts
-                | Ok (Arrow(in_t, _)), (Ok t):: ts -> 
+                | Ok (Exponent(in_t, _)), (Ok t):: ts -> 
                     Error (sprintf "Type mismatch in application : expected type %s but given type %s" (in_t.ToString()) (t.ToString()))
                 | _, (Error err):: _ | Error err, _ -> Error err
                 | _ -> Error "Type mismatch in application"
@@ -84,6 +84,20 @@ module Typechecker
             | String _   -> Ok <| Atom "word"
             | List _     -> Ok <| Atom "list"
             | Bool _     -> Ok <| Atom "bool"
+            | Tuple stmt -> 
+                let rec typeElements items types= 
+                    match items, types with 
+                    | _, (Error _ as e)::_ -> e
+                    | [], _ -> 
+                        let unpealTypes typeResults = 
+                            typeResults |> 
+                                List.map (
+                                    function 
+                                    | Ok type_n -> type_n
+                                    | _ -> failwith "Unreachable code")
+                        Ok (Intersection (unpealTypes types))
+                    | h::t, _ -> typeElements t ((TypeOf ctx h)::types)
+                typeElements stmt []
             | _          -> Error "Type error"
         | Binary(left, op, right) -> 
             let left_t = TypeOf ctx left
@@ -109,17 +123,17 @@ module Typechecker
                         let typeOfExpr = 
                             let typeOfBinaryOp = TypeOf ctx (Identifier symbol) 
                             match typeOfBinaryOp with
-                            | Ok (Arrow(lhs_t, Arrow(rhs_t, out_t))) 
+                            | Ok (Exponent(lhs_t, Exponent(rhs_t, out_t))) 
                                 when lhs_t = loperand_t && rhs_t = roperand_t-> Ok out_t
-                            | Ok (Arrow(lhs_t, Arrow(rhs_t, out_t)) as binop_t) 
-                                -> Error (sprintf "Type mismatch in binary operation : expected type %s but given type %s" (binop_t.ToString()) (Arrow(loperand_t, Arrow(roperand_t, out_t)).ToString())) 
+                            | Ok (Exponent(lhs_t, Exponent(rhs_t, out_t)) as binop_t) 
+                                -> Error (sprintf "Type mismatch in binary operation : expected type %s but given type %s" (binop_t.ToString()) (Exponent(loperand_t, Exponent(roperand_t, out_t)).ToString())) 
                             | error -> error 
                         typeOfExpr
                     else Error (sprintf "Undefined binary operation %s" symbol)
                 | _ -> Error "Unsupported binary operation"
             | Error msg, _ | _, Error msg -> Error msg 
         | Context (stmts, program) -> TypeOf ctx program
-        | TypeDefinition(Identifier(typeName), type_t, cont) -> TypeOf (Map.add typeName (Type.Custom type_t) ctx) cont
+        | TypeDefinition(Identifier(typeName), type_t, cont) -> TypeOf (Map.add typeName type_t ctx) cont
 
 
         // Statement * ((Statement * Type) * Statement) list
