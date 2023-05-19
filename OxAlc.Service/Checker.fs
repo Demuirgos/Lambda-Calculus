@@ -11,6 +11,7 @@ module Typechecker
         | (Identifier(name), arg_t):: t -> addRange t (ctx.Add(name, arg_t))  
         | _ -> failwith "Invalid type definition"
     
+    // check suggested types if they alias type infered
     let rec TypeOf (ctx : TypingContext) term = 
         match term with 
         | Bind(Identifier(name), suggested_type, body, cont) -> 
