@@ -112,10 +112,7 @@ module OxalcParser
             //                                     |> Array.map parseWord
             //         return! pMake >>. parseIdentifier .>> pSpaces .>>. parseValue
             //     } <?> "Tuple" |>> (Constructor >> Value)
-            and parseRecord = 
-                Parser {
-                    return! parseIdentifier .>>. parseLibrary
-                } <?> "Record" |>> (Constructor >> Value)
+            and parseRecord =  parseLibrary <?> "Record" 
             and parseList = 
                 Parser {
                     let pElems= (pSpaces >>.  (',' |> expect) >>. pSpaces)

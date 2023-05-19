@@ -101,6 +101,33 @@ module Typechecker
                         Ok (Intersection (unpealTypes types))
                     | h::t, _ -> typeElements t ((TypeOf ctx h)::types)
                 typeElements stmt []
+
+            | Record rcrd -> 
+                let filterStructType = 
+                    let types_in_ctx = Map.values ctx 
+                    Seq.toList <| Seq.filter (fun type_entry -> 
+                        match type_entry with 
+                        | Struct typedef -> 
+                            rcrd
+                            |>  List.forall (
+                                    fun (name, type_n, value) -> 
+                                    let value_infered_type = TypeOf ctx value 
+                                    match type_n with 
+                                    | Atom "" -> 
+                                        match value_infered_type with 
+                                        | Ok field_type -> (Map.containsKey name typedef) && (field_type = (Map.find name typedef))
+                                        | _ -> false
+                                    | _ when (Map.containsKey name typedef) 
+                                        && (type_n = (Map.find name typedef)) ->  
+                                            match value_infered_type with
+                                            | Ok field_type -> field_type = type_n
+                                            | _ -> false
+                                ) 
+                        | _ -> false
+                    ) types_in_ctx
+                match filterStructType with 
+                | h::_ -> Ok h
+                | _ -> Error "Type error"
             | _          -> Error "Type error"
         | Binary(left, op, right) -> 
             let left_t = TypeOf ctx left

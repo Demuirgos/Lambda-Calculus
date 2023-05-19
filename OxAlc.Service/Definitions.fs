@@ -18,9 +18,15 @@ module Typedefinitions
             let rec print_type type_expr = 
                 match type_expr with
                 | Atom name -> name
-                | Union cons | Intersection cons-> List.foldBack (fun c s -> sprintf "%s | %s" s (c.ToString())) cons ""
+                | Union cons | Intersection cons -> 
+                    let separator = match type_expr with Union _ -> " | " | _ -> " & "
+                    System.String.Join(separator, List.map (fun i -> i.ToString()) cons)
                 | Exponent(args, outs) -> sprintf "%s -> %s" (args.ToString()) (outs.ToString())
-                | Struct _ -> failwith "not implemented yet"
+                | Struct kvp_map -> 
+                    let fields_strings = 
+                        Map.map(fun (Identifier(k)) v -> sprintf "%s: %s" k (v.ToString())) kvp_map
+                        |> Map.values
+                    sprintf "{ %s }" (System.String.Join(", ", fields_strings))
             print_type this
     and TypingContext = Map<string, Type>
     
@@ -45,7 +51,6 @@ module Typedefinitions
         | List of List<Statement>  
         | Record of (Statement * Type * Statement) list
         | Tuple of List<Statement>
-        | Constructor of (Statement * Statement)
     and Operation   =   Cons | Add | Subs | Div | Mult | Exp | Or | And | Eq | Neq | Lt | Not | Xor | Gt | YComb | Custom of string
                         static member toOp tokens =
                             match tokens with 
