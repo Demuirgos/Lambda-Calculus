@@ -16,16 +16,18 @@ module Typechecker
         match term with 
         | Bind(Identifier(name), suggested_type, body, cont) -> 
             let bodyType = TypeOf ctx body 
-            match bodyType with
-            | Ok(term_t) 
-                when term_t = suggested_type || suggested_type = Atom String.Empty ->
+            match suggested_type, bodyType with
+            | _ as desiredTyper, Ok(term_t) 
+                when term_t = desiredTyper || desiredTyper = Atom String.Empty ->
                     let ctx = 
                         if suggested_type = Atom String.Empty
                         then ctx.Add(name, term_t) 
                         else ctx.Add(name, suggested_type)
                     TypeOf ctx cont
-            | Ok(term_t) -> Error (sprintf "Type mismatch in bind : expected type %s but given type %s" (suggested_type.ToString()) (term_t.ToString())) 
-            | error -> error 
+            | Atom(identifier), Ok(term_t) when term_t = (Map.find identifier ctx) ->
+                TypeOf (ctx.Add(name, term_t))  cont
+            | _, Ok(term_t) -> Error (sprintf "Type mismatch in bind : expected type %s but given type %s" (suggested_type.ToString()) (term_t.ToString())) 
+            | _, error -> error 
         | Branch(_cond, _then, _else) -> 
             let condType = TypeOf ctx _cond
             let thenType = TypeOf ctx _then
