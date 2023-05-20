@@ -5,6 +5,7 @@ module OxalcCompiler
     open Typedefinitions
     open Parsec
     open OxalcParser
+    open System
     open System.IO
     open System.Text.RegularExpressions
 
@@ -273,28 +274,34 @@ module OxalcCompiler
                 | Branch(cond,tClause, fClause) as (t: Statement) -> 
                     sprintf "((%s) ? (() => %s) : (() => %s))()" (emitJavascript cond) (emitJavascript tClause) (emitJavascript fClause)
                 | Binary(lhs, Op, rhs) ->
+                    let isFieldLens = 
+                        match rhs with 
+                        | Identifier _ -> true
+                        | _ -> false
+
                     let opToString op = 
                         match op with 
-                        | Add  -> Ok "+"
-                        | Subs -> Ok "-"
-                        | Mult -> Ok "*"
-                        | Div  -> Ok "/"
-                        | Eq   -> Ok "=="
-                        | Neq  -> Ok "!="
-                        | Lt   -> Ok "<"
-                        | Gt   -> Ok ">"
-                        | And  -> Ok "&&"
-                        | Or   -> Ok "||"
-                        | Custom op -> Error op
-                        | _ -> failwith "Not Implemented" 
-                    match opToString Op with
-                    | Ok op -> sprintf "%s %s %s" (emitJavascript lhs) op (emitJavascript rhs)
-                    | Error op -> sprintf "%s(%s)(%s)" (emitJavascript(Identifier op)) (emitJavascript lhs) (emitJavascript rhs)
+                        | Add  -> "+"
+                        | Subs -> "-"
+                        | Mult -> "*"
+                        | Div  -> "/"
+                        | Eq   -> "=="
+                        | Neq  -> "!="
+                        | Lt   -> "<"
+                        | Gt   -> ">"
+                        | And  -> "&&"
+                        | Or   -> "||"
+                        | _ -> String.Empty
+                    match Op with
+                    | Dot when isFieldLens -> sprintf "%s.%s" (emitJavascript lhs) (emitJavascript rhs)
+                    | Dot -> sprintf "%s[%s]" (emitJavascript lhs) (emitJavascript rhs)
+                    | Custom op -> sprintf "%s(%s)(%s)" (emitJavascript(Identifier op)) (emitJavascript lhs) (emitJavascript rhs)
+                    | _ -> sprintf "%s %s %s" (emitJavascript lhs) (opToString Op) (emitJavascript rhs)
                 | Value(var) -> 
                     let varToString = match var with 
                         | Variable(n) -> n.ToString()
                         | Bool(b) -> b.ToString().ToLower()
-                        | String(str) -> toString str
+                        | String(str) -> sprintf "\"%s\"" (toString str)
                         | Tuple(values) | List(values) -> 
                             sprintf "[%s]" (String.concat "," (List.map emitJavascript values))
                         | Record(fields) -> 
@@ -309,3 +316,5 @@ module OxalcCompiler
             Ok (JSR(emitJavascript program), ``initial State``)
         | target, Ok _ -> Error("Backend not supported", sprintf "%A is not supported" target, None)
         | _, Error err-> Error err
+
+// type fullname = { lastname:word; firstname:word; } in type student = { name:fullname; age:number; } in let ayman_obj := { name:= { lastname:= "ayman"; firstname:= "bouchareb" }; age:=23 } in ayman_obj

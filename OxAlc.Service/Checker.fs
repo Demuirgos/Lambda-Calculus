@@ -111,7 +111,7 @@ module Typechecker
                                     | _ -> failwith "Unreachable code")
                         Ok (Intersection (unpealTypes types))
                     | h::t, _ -> typeElements t ((TypeOf h ctx)::types)
-                typeElements stmt []
+                typeElements (List.rev stmt) []
 
             | Record rcrd -> 
                 let filterStructType = 
@@ -148,23 +148,31 @@ module Typechecker
         | Binary(left, op, right) -> 
             let left_t  = TypeOf left ctx 
             let right_t = TypeOf right ctx 
-            match left_t, right_t with
-            | Ok (left_t), Ok (right_t) -> 
-                match op, left_t, right_t with
-                | Add , Atom "number" , Atom "number" -> Ok (Atom "number")
-                | Subs, Atom "number" , Atom "number" -> Ok (Atom "number")
-                | Mult, Atom "number" , Atom "number" -> Ok (Atom "number")
-                | Div , Atom "number" , Atom "number" -> Ok (Atom "number")
-                | Exp , Atom "number" , Atom "number" -> Ok (Atom "number")
-                | Eq  , Atom "number" , Atom "number" -> Ok (Atom "bool")
-                | Gt  , Atom "number" , Atom "number" -> Ok (Atom "bool")
-                | Lt  , Atom "number" , Atom "number" -> Ok (Atom "bool")
-                | And , Atom "bool"   , Atom "bool"   -> Ok (Atom "bool")
-                | Or  , Atom "bool"   , Atom "bool"   -> Ok (Atom "bool")
-                | Not , Atom "bool"   , Atom "bool"   -> Ok (Atom "bool")
-                | Xor , Atom "bool"   , Atom "bool"   -> Ok (Atom "bool")
-                | Cons, Atom _        , Atom "list"   -> Ok (Atom "list")
-                | Custom symbol, loperand_t, roperand_t -> 
+
+            let rec handle op lhs_t rhs_t = 
+                match op, lhs_t, rhs_t with
+                | Add , Ok (Atom "number") , Ok(Atom "number") -> Ok (Atom "number")
+                | Subs, Ok (Atom "number") , Ok(Atom "number") -> Ok (Atom "number")
+                | Mult, Ok (Atom "number") , Ok(Atom "number") -> Ok (Atom "number")
+                | Div , Ok (Atom "number") , Ok(Atom "number") -> Ok (Atom "number")
+                | Exp , Ok (Atom "number") , Ok(Atom "number") -> Ok (Atom "number")
+                | Eq  , Ok (Atom "number") , Ok(Atom "number") -> Ok (Atom "bool")
+                | Gt  , Ok (Atom "number") , Ok(Atom "number") -> Ok (Atom "bool")
+                | Lt  , Ok (Atom "number") , Ok(Atom "number") -> Ok (Atom "bool")
+                | And , Ok (Atom "bool"  ) , Ok(Atom "bool"  ) -> Ok (Atom "bool")
+                | Or  , Ok (Atom "bool"  ) , Ok(Atom "bool"  ) -> Ok (Atom "bool")
+                | Not , Ok (Atom "bool"  ) , Ok(Atom "bool"  ) -> Ok (Atom "bool")
+                | Xor , Ok (Atom "bool"  ) , Ok(Atom "bool"  ) -> Ok (Atom "bool")
+                | Cons, Ok (Atom _       ) , Ok(Atom "list"  ) -> Ok (Atom "list")
+                | Dot , Ok (Atom type_name) , _ -> 
+                    handle Dot (match Map.tryFind type_name ctx.Types with | Some(t) -> Ok(t) | _ -> Error("Missing type")) right_t
+                | Dot , Ok (Struct fields) , _ -> Ok (Map.find right fields)
+                | Dot , Ok (Intersection items) , _ -> 
+                    let item_index  = 
+                        match right with 
+                        | Value(Variable(index)) -> index 
+                    Ok (items[item_index])
+                | Custom symbol, Ok(loperand_t), Ok(roperand_t) -> 
                     if(ctx.Symbols.ContainsKey(symbol)) then 
                         let typeOfExpr = 
                             let typeOfBinaryOp = TypeOf (Identifier symbol) ctx
@@ -177,7 +185,7 @@ module Typechecker
                         typeOfExpr
                     else Error (sprintf "Undefined binary operation %s" symbol)
                 | _ -> Error "Unsupported binary operation"
-            | Error msg, _ | _, Error msg -> Error msg 
+            handle op left_t right_t
         | Context (stmts, program) -> TypeOf program ctx
         | TypeDefinition(Identifier(typeName), type_t, cont) -> TypeOf cont (addType typeName type_t ctx) 
 
