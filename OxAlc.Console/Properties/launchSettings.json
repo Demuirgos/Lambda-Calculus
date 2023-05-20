@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "OxAlc.Console": {
+      "commandName": "Project",
+      "commandLineArgs": "--mode Terminal --back JS"
+    }
+  }
+}

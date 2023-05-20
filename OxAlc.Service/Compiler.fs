@@ -71,7 +71,7 @@ module OxalcCompiler
                             | Error err -> Error err
                     match program with
                     | Ok program -> 
-                        let typeResult = TypeOf Map.empty program 
+                        let typeResult = TypeOf program TypingContext.Empty
                         match typeResult with
                         | Ok(expr_type) -> 
                             printf "val it : %s = " (expr_type.ToString())
@@ -196,10 +196,10 @@ module OxalcCompiler
                             | Error err -> Error err
                     match program with
                     | Ok program -> 
-                        let typeResult = TypeOf Map.empty program 
+                        let typeResult = TypeOf program TypingContext.Empty
                         match typeResult with
-                        | Ok _ -> 
-                            printf "var it = " 
+                        | Ok typeName -> 
+                            printf "var it :%s= " (typeName.ToString())
                             emitJavascript program
                         | Error msg -> failwith msg
                     | Error msgs -> 
@@ -210,7 +210,10 @@ module OxalcCompiler
                                 sprintf "%s: %s \n%s" label msg (msgAcc errs)
                         failwith (msgAcc msgs)
                 | Bind(name,_,  expr, value) ->
-                    sprintf "((%s) => %s)(%s)" (emitJavascript name) (emitJavascript value) (emitJavascript expr)
+                    if name = value then 
+                        sprintf "%s" (emitJavascript expr)
+                    else 
+                        sprintf "((%s) => %s)(%s)" (emitJavascript name) (emitJavascript value) (emitJavascript expr)
                 | Compound(expr, binds) as e -> 
                     let rec hoistBinds binds =
                         match binds with 
@@ -222,11 +225,21 @@ module OxalcCompiler
                     | Function([(arg, _)], body) -> 
                         sprintf "(%s) => %s" (emitJavascript arg) (emitJavascript body) 
                 | Application(expr, args) as a ->
-                    let rec prepareArgs params = 
-                        params 
-                        |> List.map (fun p -> sprintf "(%s)" (emitJavascript p))
-                        |> List.fold (fun acc p -> sprintf "%s %s" acc p) ""
-                    sprintf "%s%s" (emitJavascript expr) (prepareArgs args)
+                    let isIdentity = 
+                        match expr with 
+                        | Function([(iden, _)], body) -> iden = body
+                        | _ -> false
+                    printf "%A %A" isIdentity (a)
+
+
+                    if isIdentity then 
+                        sprintf "%s" (emitJavascript (List.head args))
+                    else
+                        let rec prepareArgs params = 
+                            params 
+                            |> List.map (fun p -> sprintf "(%s)" (emitJavascript p))
+                            |> List.fold (fun acc p -> sprintf "%s %s" acc p) ""
+                        sprintf "%s%s" (emitJavascript expr) (prepareArgs args)
                 | Identifier(name) ->
                     let replaceSpecialCharacters c = 
                         match c with 
@@ -285,15 +298,16 @@ module OxalcCompiler
                         | Variable(n) -> n.ToString()
                         | Bool(b) -> b.ToString().ToLower()
                         | String(str) -> toString str
+                        | Tuple(values) | List(values) -> 
+                            sprintf "[%s]" (String.concat "," (List.map emitJavascript values))
                         | Record(fields) -> 
                             let rec fieldsToString fields = 
                                 match fields with 
                                 | [] -> System.String.Empty
-                                | ((name, _, value)::t) -> sprintf "%s: %s,\n%s" (emitJavascript name) (emitJavascript value) (fieldsToString t)
-                                | _ -> failwith "Not Implemented" 
-                            sprintf "{%s}" (fieldsToString fields)
-                        | _ -> failwith "Not Implemented"
+                                | ((name, _, value)::t) -> sprintf "\t%s: %s,\n%s" (emitJavascript name) (emitJavascript value) (fieldsToString t)
+                            sprintf "{\n%s}" (fieldsToString fields)
                     sprintf "%s" varToString
+                | TypeDefinition(_, _, cont) -> emitJavascript cont
                 | _  -> failwith "Not Implemented or Not Compilable"
             Ok (JSR(emitJavascript program), ``initial State``)
         | target, Ok _ -> Error("Backend not supported", sprintf "%A is not supported" target, None)

@@ -6,7 +6,32 @@ open Interpreter
 open OxalcParser
 open OxalcCompiler
 
+let parseArguments args = 
+    let rec setDefaults defaults map= 
+        match defaults with 
+        | [] -> map
+        | (k, v)::t -> 
+            setDefaults t
+                (if not(Map.containsKey k map) then 
+                    Map.add k v map
+                 else map)
+                 
+
+    let rec loop args map = 
+        match args with 
+        | [] -> map
+        | h::(s::t) -> 
+            loop t (Map.add h s map)
+    loop args Map.empty
+    |> setDefaults [("--mode", "Terminal"); ("--back", "LCR")]
+
 type Mode = File of string | Terminal | Lambda
+    with static member fromString str = 
+        match str with 
+        | "Lambda" -> Lambda
+        | "Terminal" -> Terminal
+        | _ -> File str
+
 [<EntryPoint>]
 let REPL args =
     let execute mode backend= 
@@ -38,8 +63,10 @@ let REPL args =
                               | Lambda -> Lambda
                               | _ -> Terminal )
         loop mode prefix
-    match args with 
-    | [||]         -> execute Terminal LCR
-    | [|"--mode"; "lambda"|]-> execute Lambda LCR
-    | [|"--path"; path; "--backend"; target|]-> execute (File(path)) (Backend.Parse target)
-    | _            -> failwith "Usage: Can Only Run 1 File at a time"
+
+    let parsedArgs = parseArguments (Array.toList args)
+
+    let mode = Mode.fromString <| Map.find "--mode" parsedArgs
+    let back = Backend.Parse <| Map.find "--back" parsedArgs
+
+    execute mode back

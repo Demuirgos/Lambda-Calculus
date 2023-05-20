@@ -28,7 +28,14 @@ module Typedefinitions
                         |> Map.values
                     sprintf "{ %s }" (System.String.Join(", ", fields_strings))
             print_type this
-    and TypingContext = Map<string, Type>
+    and TypingContext = {
+            Symbols: Map<string, Type>
+            Types : Map<string, Type>
+        }
+        with static member Empty = {
+            Symbols = Map.empty
+            Types = Map.empty
+        }
     
     and Statement = 
         (* Primitive Constructs*)
