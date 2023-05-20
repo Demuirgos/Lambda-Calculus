@@ -229,9 +229,6 @@ module OxalcCompiler
                         match expr with 
                         | Function([(iden, _)], body) -> iden = body
                         | _ -> false
-                    printf "%A %A" isIdentity (a)
-
-
                     if isIdentity then 
                         sprintf "%s" (emitJavascript (List.head args))
                     else
