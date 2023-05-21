@@ -148,9 +148,15 @@ module Typechecker
                                 ) 
                         | _ -> false
                     ) types_in_ctx
-                match filterStructType with 
-                | h::_ -> Ok h
-                | _ -> Error "Type error"
+                let rec narrowType candidates = 
+                    match candidates with 
+                    | Struct(fields) as type_result::rest -> 
+                        if Map.count fields = List.length rcrd then 
+                            Ok(type_result)
+                        else narrowType rest
+                    | _ -> Error "Type error"
+
+                narrowType filterStructType
             | _          -> Error "Type error"
         | Binary(left, op, right) -> 
             let left_t  = TypeOf left ctx 
