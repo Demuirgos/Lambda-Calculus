@@ -213,7 +213,7 @@ module OxalcCompiler
                         let typeResult = TypeOf program TypingContext.Empty
                         match typeResult with
                         | Ok typeName -> 
-                            printf "var it :%s= " (typeName.ToString())
+                            printf "var it = " 
                             emitJavascript program
                         | Error msg -> failwith msg
                     | Error msgs -> 
