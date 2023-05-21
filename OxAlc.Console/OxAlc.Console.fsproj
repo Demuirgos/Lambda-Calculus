@@ -7,6 +7,12 @@
 
   <ItemGroup>
     <Compile Include="Program.fs" />
+    <None Include="Examples\calculator.oxalc" />
+    <None Include="Examples\constants.oxalc" />
+    <None Include="Examples\functions.oxalc" />
+    <None Include="Examples\operators.oxalc" />
+    <None Include="Examples\programs1.oxalc" />
+    <None Include="Examples\programs2.oxalc" />
     <ProjectReference Include="..\OxAlc.Service\Lambdas.fsproj" />
   </ItemGroup>
 

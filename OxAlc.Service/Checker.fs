@@ -65,7 +65,14 @@ module Typechecker
                 in_vs |> List.rev |> constructType out_t
             | error -> error
         | Application(func, args)  -> 
-            let func_t = TypeOf func ctx
+            let func_t = 
+                match TypeOf func ctx with 
+                | Ok (Atom(alias)) -> 
+                    match Map.tryFind alias ctx.Types with 
+                    | Some type_instance -> Ok (type_instance)
+                    | None -> Error(sprintf "type alias %s not found" alias)
+                | Ok _ as type_name -> type_name
+                | _ as error -> error 
             let args_t = args |> List.map (fun arg -> TypeOf arg ctx) 
             let rec checkValidity func args = 
                 match func, args with

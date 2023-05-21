@@ -27,6 +27,22 @@ module OxalcCompiler
         let parseExp arg = (fromStr arg, parseExpr) ||> run 
         let Result = parseExp input
         printfn "%A" Result
+
+        let rec injectFields fields p = 
+            match fields with 
+            | (fd_id, fd_t, fd_body)::t -> 
+                Bind(fd_id, fd_t, fd_body, injectFields t p)
+            | _ -> p
+
+        let rec injectTypedefs type_def p = 
+            match type_def with 
+            | TypeDefinition (name, def, cont) ->
+                TypeDefinition(name, def, match cont with 
+                    | Value(Record(fields)) -> injectFields fields p
+                    | TypeDefinition _ as type_def ->  injectTypedefs type_def p
+                )
+            | _ -> p
+
         match backend, Result with 
         | LCR, Ok (program,r)-> 
             let toSyntaxTree =  Interpreter.parse     >> (function Ok (LCRR(code),_)   -> code) >> 
@@ -46,12 +62,6 @@ module OxalcCompiler
                                     | Error _ as error, _ -> error 
                                     | _, Error err  -> Error [err]
                                 Seq.fold folder (Ok []) 
-
-                            let rec injectFields fields p= 
-                                match fields with 
-                                | (fd_id, fd_t, fd_body)::t -> 
-                                    Bind(fd_id, fd_t, fd_body, injectFields t p)
-                                | _ -> p
 
                             let rec wrapFiles filesAst program = 
                                 match filesAst with 
@@ -172,23 +182,26 @@ module OxalcCompiler
                                     | _, Error err  -> Error [err]
                                 Seq.fold folder (Ok []) 
 
-                            let rec injectFields fields p= 
-                                match fields with 
-                                | (fd_id, fd_t, fd_body)::t -> 
-                                    Bind(fd_id, fd_t, fd_body, injectFields t p)
-                                | _ -> p
-
                             let rec wrapFiles filesAst program = 
                                 match filesAst with 
                                 | []   -> Ok program
-                                | Bind(_, _ , Context(dependencies, Value(Record(fields))), _)::t ->
+                                | Bind(_, _ , Context(dependencies, content), _)::t ->
                                     let dependenciesContent = all (filesContents dependencies)
                                     match dependenciesContent with
                                     | Ok ds -> 
-                                        match wrapFiles ds (injectFields fields program) with
-                                        | Ok result -> wrapFiles t result
-                                        | Error err -> Error err
+                                        match content with 
+                                        | Value(Record(fields)) -> 
+                                            match wrapFiles ds (injectFields fields program) with
+                                            | Ok result -> wrapFiles t result
+                                            | Error err -> Error err
+                                        | TypeDefinition(name, def, cont) as type_def -> 
+                                            match wrapFiles ds (injectTypedefs type_def program) with
+                                            | Ok result -> wrapFiles t result
+                                            | Error err -> Error err
                                     | Error msg -> Error msg
+                                
+                                | Bind(_, _ , TypeDefinition(name, def, cont), _) as bind::t ->
+                                    wrapFiles t (injectTypedefs (TypeDefinition (name, def, cont)) program)
                                 | Bind(_, _ , Value(Record(fields)), _)::t ->
                                     wrapFiles t (injectFields fields program)
                                 | _ -> Error [("Import Error","Invalid file structure", None)]

@@ -1,0 +1,6 @@
+let program := 
+    include [calculator] for
+    let result := (calc . add)(1, 2) in 
+    let custom_bin :binary_op= (a:number, b:number) => a + (b * 2) in
+    custom_bin(result, result + 1)
+end program 

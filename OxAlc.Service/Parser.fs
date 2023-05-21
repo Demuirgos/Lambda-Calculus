@@ -46,7 +46,7 @@ module OxalcParser
             and parseStruct = 
                 Parser {
                     let (pOpenCurly, pDoublePts ,pCloseCurly, pSemicolon) =  (parseWord "{", parseWord ":", parseWord "}", parseWord ";")
-                    let parseField = parseIdentifier .>> pSpaces .>> pDoublePts .>> pSpaces .>>. parseUnit .>> pSpaces .>> pSemicolon .>> pSpaces
+                    let parseField = parseIdentifier .>> pSpaces .>> pDoublePts .>> pSpaces .>>. parseType .>> pSpaces .>> pSemicolon .>> pSpaces
                     let parseFields = many 1 parseField
                     let pStructDef = pOpenCurly >>. pSpaces >>. parseFields .>> pSpaces .>> pCloseCurly
                     return! pStructDef
