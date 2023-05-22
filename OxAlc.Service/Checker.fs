@@ -23,57 +23,61 @@ module Typechecker
         | _ -> failwith "Invalid type definition"
     
     // check suggested types if they alias type infered
-    let rec TypeOf term (ctx : TypingContext) = 
+    let rec TypeOf term (ctx : TypingContext) : (Result<Type, string> * TypingContext) = 
         match term with 
         | Bind(Identifier(name), suggested_type, body, cont) -> 
-            let bodyType = TypeOf body ctx  
+            let (bodyType, ctx) = TypeOf body ctx  
             match suggested_type, bodyType with
             | _ as desiredTyper, Ok(term_t) 
                 when term_t = desiredTyper || desiredTyper = Atom String.Empty ->
-                    let ctx = addSymbol name (if suggested_type = Atom String.Empty
-                        then term_t 
-                        else suggested_type)  ctx
-                        
+                    let ctx = 
+                        match term_t, body with 
+                        | Atom "type", Value(TypeDefinition(type_def)) ->
+                            addType name type_def ctx
+                        | _ -> 
+                            addSymbol name (if suggested_type = Atom String.Empty
+                                then term_t 
+                                else suggested_type)  ctx
                     TypeOf cont ctx 
-            | Atom(identifier), Ok(term_t) when term_t = (Map.find identifier ctx.Types) ->
+            | Atom(identifier), Ok(term_t) when Map.containsKey identifier ctx.Types && term_t = (Map.find identifier ctx.Types) ->
                 TypeOf cont (addSymbol name term_t ctx)  
-            | _, Ok(term_t) -> Error (sprintf "Type mismatch in bind : expected type %s but given type %s" (suggested_type.ToString()) (term_t.ToString())) 
-            | _, error -> error 
+            | _, Ok(term_t) -> Error (sprintf "Type mismatch in bind : expected type %s but given type %s" (suggested_type.ToString()) (term_t.ToString())), ctx
+            | _, error -> error, ctx
         | Branch(_cond, _then, _else) -> 
-            let condType = TypeOf _cond ctx 
-            let thenType = TypeOf _then ctx 
-            let elseType = TypeOf _else ctx  
+            let (condType, ctx) = TypeOf _cond ctx 
+            let (thenType, ctx) = TypeOf _then ctx 
+            let (elseType, ctx) = TypeOf _else ctx  
             match condType, thenType, elseType with
-            | Ok(Atom "bool"), Ok(then_t), Ok(else_t) when then_t = else_t -> Ok(then_t)
+            | Ok(Atom "bool"), Ok(then_t), Ok(else_t) when then_t = else_t -> Ok(then_t), ctx
             | Ok(Atom "bool"), Ok(then_t), Ok(else_t) -> 
-                Error (sprintf "Type mismatch in if-expr : expression branches types don't match %s and %s" (then_t.ToString()) (else_t.ToString())) 
-            | Ok cond_t, _, _ -> Error (sprintf "Type mismatch in if-expr : Condition Type must be %s but given %s" (Atom("bool").ToString()) (cond_t.ToString())) 
-            | Error err, _, _ | _, Error err, _ | _, _ , Error err -> Error err
+                Error (sprintf "Type mismatch in if-expr : expression branches types don't match %s and %s" (then_t.ToString()) (else_t.ToString())), ctx
+            | Ok cond_t, _, _ -> Error (sprintf "Type mismatch in if-expr : Condition Type must be %s but given %s" (Atom("bool").ToString()) (cond_t.ToString())), ctx
+            | Error err, _, _ | _, Error err, _ | _, _ , Error err -> Error err, ctx
         | Identifier(name)  -> 
             if(ctx.Symbols.ContainsKey(name)) 
-            then Ok ctx.Symbols[name]
-            else Error (sprintf "Undefined identifier %s" name)
+            then Ok ctx.Symbols[name], ctx
+            else Error (sprintf "Undefined identifier %s" name), ctx
         | Function(in_vs, out_v) ->
             let ctx = addRange in_vs ctx
             match TypeOf out_v ctx with 
-            | Ok(out_t) -> 
+            | Ok(out_t), ctx -> 
                 let rec constructType res = 
                     function
                     | [] -> Error "Function expects at least one argument"
                     | [(_, arg_t)] -> Ok (Exponent(arg_t, res))
                     | (_, arg_t):: t ->  constructType (Exponent(arg_t, res)) t
-                in_vs |> List.rev |> constructType out_t
+                (in_vs |> List.rev |> constructType out_t), ctx
             | error -> error
         | Application(func, args)  -> 
             let func_t = 
                 match TypeOf func ctx with 
-                | Ok (Atom(alias)) -> 
+                | Ok (Atom(alias)), ctx -> 
                     match Map.tryFind alias ctx.Types with 
                     | Some type_instance -> Ok (type_instance)
                     | None -> Error(sprintf "type alias %s not found" alias)
-                | Ok _ as type_name -> type_name
-                | _ as error -> error 
-            let args_t = args |> List.map (fun arg -> TypeOf arg ctx) 
+                | Ok _ as type_name , _ -> type_name
+                | _ as error, _ -> error 
+            let args_t = args |> List.map ((fun arg -> TypeOf arg ctx) >> fst) 
             let rec checkValidity func args = 
                 match func, args with
                 | Ok t , [] -> Ok (t)
@@ -83,13 +87,14 @@ module Typechecker
                     Error (sprintf "Type mismatch in application : expected type %s but given type %s" (in_t.ToString()) (t.ToString()))
                 | _, (Error err):: _ | Error err, _ -> Error err
                 | _ -> Error "Type mismatch in application"
-            checkValidity func_t args_t
+            checkValidity func_t args_t, ctx
         | Compound(expr, binds) -> 
             let rec typesList binds res = 
                 match binds with
                 | [] -> Ok res
                 | ((iden, id_t), body) :: t -> 
-                    match TypeOf body ctx with
+                    let (typeing_result, ctx) = TypeOf body ctx 
+                    match typeing_result with
                     | Ok type_r when type_r = id_t || id_t = Atom "" -> typesList t ((iden, type_r)::res) 
                     | Ok type_r -> Error (sprintf "Type mismatch in compound : expected type %s but given type %s" (id_t.ToString()) (type_r.ToString()))
                     | Error err -> Error err
@@ -98,15 +103,16 @@ module Typechecker
             | Ok binds_t -> 
                 let ctx = addRange binds_t ctx
                 TypeOf expr ctx
-            | Error msg -> Error msg 
+            | Error msg -> Error msg, ctx
         | Value lit -> 
             match lit with 
-            | Variable _ -> Ok <| Atom "number"
-            | String _   -> Ok <| Atom "word"
-            | List _     -> Ok <| Atom "list"
-            | Bool _     -> Ok <| Atom "bool"
+            | TypeDefinition _ -> Ok <| Atom "type", ctx
+            | Variable _ -> Ok <| Atom "number", ctx
+            | String _   -> Ok <| Atom "word", ctx
+            | List _     -> Ok <| Atom "list", ctx
+            | Bool _     -> Ok <| Atom "bool", ctx
             | Tuple stmt -> 
-                let rec typeElements items types= 
+                let rec typeElements items types ctx= 
                     match items, types with 
                     | _, (Error _ as e)::_ -> e
                     | [], _ -> 
@@ -117,9 +123,10 @@ module Typechecker
                                     | Ok type_n -> type_n
                                     | _ -> failwith "Unreachable code")
                         Ok (Intersection (unpealTypes types))
-                    | h::t, _ -> typeElements t ((TypeOf h ctx)::types)
-                typeElements (List.rev stmt) []
-
+                    | h::t, _ -> 
+                        let (type_result, ctx) = TypeOf h ctx
+                        typeElements t (type_result::types) ctx
+                (typeElements (List.rev stmt) [] ctx), ctx
             | Record rcrd -> 
                 let filterStructType = 
                     let types_in_ctx = Map.values ctx.Types 
@@ -133,17 +140,17 @@ module Typechecker
                                         match type_n with 
                                         | Atom "" -> 
                                             match value_infered_type with 
-                                            | Ok field_type -> (Map.containsKey name typedef) && (field_type = (Map.find name typedef))
+                                            | Ok field_type, _ -> (Map.containsKey name typedef) && (field_type = (Map.find name typedef))
                                             | _ -> false
                                         | Atom suggestedName as type_sn-> 
                                             let actualType = if Map.containsKey suggestedName ctx.Types then Map.find suggestedName ctx.Types else type_sn
                                             match value_infered_type with 
-                                            | Ok field_type when field_type = actualType  -> (Map.containsKey name typedef) && (type_n = (Map.find name typedef))
+                                            | Ok field_type, _ when field_type = actualType  -> (Map.containsKey name typedef) && (type_n = (Map.find name typedef))
                                             | _ -> false
                                         | _ when (Map.containsKey name typedef) 
                                             && (type_n = (Map.find name typedef)) ->  
                                                 match value_infered_type with
-                                                | Ok field_type -> field_type = type_n
+                                                | Ok field_type, _ -> field_type = type_n
                                                 | _ -> false
                                 ) 
                         | _ -> false
@@ -156,11 +163,11 @@ module Typechecker
                         else narrowType rest
                     | _ -> Error "Type error"
 
-                narrowType filterStructType
-            | _          -> Error "Type error"
+                narrowType filterStructType, ctx
+            | _          -> Error "Type error", ctx
         | Binary(left, op, right) -> 
-            let left_t  = TypeOf left ctx 
-            let right_t = TypeOf right ctx 
+            let (left_t, ctx)  = TypeOf left ctx 
+            let (right_t, ctx) = TypeOf right ctx 
 
             let rec handle op lhs_t rhs_t = 
                 match op, lhs_t, rhs_t with
@@ -190,17 +197,16 @@ module Typechecker
                         let typeOfExpr = 
                             let typeOfBinaryOp = TypeOf (Identifier symbol) ctx
                             match typeOfBinaryOp with
-                            | Ok (Exponent(lhs_t, Exponent(rhs_t, out_t))) 
+                            | Ok (Exponent(lhs_t, Exponent(rhs_t, out_t))), _ 
                                 when lhs_t = loperand_t && rhs_t = roperand_t-> Ok out_t
-                            | Ok (Exponent(lhs_t, Exponent(rhs_t, out_t)) as binop_t) 
+                            | Ok (Exponent(lhs_t, Exponent(rhs_t, out_t)) as binop_t), _
                                 -> Error (sprintf "Type mismatch in binary operation : expected type %s but given type %s" (binop_t.ToString()) (Exponent(loperand_t, Exponent(roperand_t, out_t)).ToString())) 
-                            | error -> error 
+                            | _ as error, _ -> error
                         typeOfExpr
                     else Error (sprintf "Undefined binary operation %s" symbol)
                 | _ -> Error "Unsupported binary operation"
-            handle op left_t right_t
-        | Context (stmts, program) -> TypeOf program ctx
-        | TypeDefinition(Identifier(typeName), type_t, cont) -> TypeOf cont (addType typeName type_t ctx) 
+            handle op left_t right_t, ctx
+        | Context (_, program) -> TypeOf program ctx
 
 
         // Statement * ((Statement * Type) * Statement) list

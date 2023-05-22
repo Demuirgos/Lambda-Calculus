@@ -45,7 +45,6 @@ module Typedefinitions
         (* Derivative Constructs*)
         | Identifier        of string 
         | Bind              of Statement * Type * Statement * Statement 
-        | TypeDefinition    of Statement * Type * Statement
         | Unary             of Operation * Statement
         | Binary            of Statement * Operation * Statement
         | Branch            of Statement * Statement * Statement
@@ -58,6 +57,7 @@ module Typedefinitions
         | List of List<Statement>  
         | Record of (Statement * Type * Statement) list
         | Tuple of List<Statement>
+        | TypeDefinition of Type 
     and Operation   =   Cons | Add | Subs | Div | Mult | Exp | Or | And | Eq | Neq | Lt | Not | Xor | Gt | YComb | Dot | Custom of string
                         static member toOp tokens =
                             match tokens with 
