@@ -14,7 +14,7 @@ let calculator :=
             add:binary_op=(n: number, m:number) => m + n; 
             sub:binary_op=(n: number, m:number) => m - n; 
             mul:binary_op=(n: number, m:number) => m * n; 
-            div:binary_op=(n: number, m:number) => m / n 
+            div:binary_op=(n: number, m:number) => m / n;
         }
     }
 end calculator 

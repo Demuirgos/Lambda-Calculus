@@ -5,6 +5,6 @@ let operators :=
         ==    := (n:number, m:number) => ((n = m) ?? 1)(0);
         <>    := (n:number, m:number) => ((n = m) ?? 0)(1);
         ?    := (n:number) => if n = 0 then false else true;
-        |>    := (m:number, f:number->number) => f(m)
+        |>    := (m:number, f:number->number) => f(m);
     }
 end operators

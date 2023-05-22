@@ -184,15 +184,14 @@ module OxalcParser
             let mapper = fun ((a,b),c) -> (a,b,c)
             let parseMapping = 
                 Parser {
-                    let [|consumeTyper;  consumeEq|] = [|":"; "="|] |> Array.map parseWord
+                    let [|consumeTyper;  consumeEq; consumeSemCol|] = [|":"; "="; ";"|] |> Array.map parseWord
                     let pKey = parseIdentifier
                     let pValue = parseValue <|> parseFunction <|> (parseLet false) 
-                    return! pKey .>> pSpaces .>> consumeTyper .>> pSpaces .>>. parseType .>> pSpaces .>> consumeEq .>> pSpaces .>>. pValue
+                    return! pKey .>> pSpaces .>> consumeTyper .>> pSpaces .>>. parseType .>> pSpaces .>> consumeEq .>> pSpaces .>>. pValue .>> pSpaces .>> consumeSemCol .>> pSpaces
                 }
             Parser {
-                return! (pSpaces >>. (expect ';') >>. pSpaces)
-                            |> separateBy 1 parseMapping
-                            |> betweenC ('{', '}')
+                let (pOpenCurly, pCloseCurly) =  (parseWord "{", parseWord "}")
+                return! pOpenCurly >>. pSpaces >>. (many 1 parseMapping) .>> pSpaces .>> pCloseCurly;
             } <?> "Library" |>> ((List.map mapper) >> Record >> Value)
         and parseExpression = 
             Parser {

@@ -3,6 +3,6 @@ let functions := {
         incr  := (n:number) => n + 1;
         decr  := (n:number) => n - 1;
         check := (pred:number->bool, n:number) => cond(pred(n), 1, 0);
-        apply := (f:number->number, n:number) => f(n)
+        apply := (f:number->number, n:number) => f(n);
     }
 end functions
