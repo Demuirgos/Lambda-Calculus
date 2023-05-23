@@ -24,7 +24,7 @@ let constants := {
 end constants 
 ```
 * in a separate file called calculator.oxalc : 
-```
+```fs
 let calculator := {
     binary_op :type= number->number->number; 
     calc :type= { 
