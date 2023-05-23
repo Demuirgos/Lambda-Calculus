@@ -1,20 +1,17 @@
-let calculator := 
-    include [] for
-    type binary_op = number->number->number in 
-    type calc = { 
+let calculator := {
+    binary_op :type= number->number->number; 
+    calc :type= { 
         zero: number;
         one: number;
         add:binary_op; 
         sub:binary_op; 
         mul:binary_op; 
         div:binary_op; 
-    } in 
-    {
-        calc : calc = {
-            add:binary_op=(n: number, m:number) => m + n; 
-            sub:binary_op=(n: number, m:number) => m - n; 
-            mul:binary_op=(n: number, m:number) => m * n; 
-            div:binary_op=(n: number, m:number) => m / n;
-        }
-    }
-end calculator 
+    }; 
+    calc : calc = {
+        add:binary_op=(n: number, m:number) => m + n; 
+        sub:binary_op=(n: number, m:number) => m - n; 
+        mul:binary_op=(n: number, m:number) => m * n; 
+        div:binary_op=(n: number, m:number) => m / n;
+    };
+} end calculator 

@@ -1,10 +1,10 @@
 let operators := 
     include [functions] for {
-        ++    := (n:number) => incr(n);
-        ??    := (b:bool, n:number, m:number) => cond(b, n, m);
-        ==    := (n:number, m:number) => ((n = m) ?? 1)(0);
-        <>    := (n:number, m:number) => ((n = m) ?? 0)(1);
-        ?    := (n:number) => if n = 0 then false else true;
-        |>    := (m:number, f:number->number) => f(m);
+        ++  := (n:number) => incr(n);
+        ??  := (b:bool, n:number, m:number) => cond(b, n, m);
+        ==  := (n:number, m:number) => ((n = m) ?? 1)(0);
+        <>  := (n:number, m:number) => ((n = m) ?? 0)(1);
+        ?   := (n:number) => if n = 0 then false else true;
+        |>  := (m:number, f:number->number) => f(m);
     }
 end operators
