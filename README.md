@@ -23,6 +23,26 @@ let constants := {
     }
 end constants 
 ```
+* in a separate file called calculator.oxalc : 
+```
+let calculator := {
+    binary_op :type= number->number->number; 
+    calc :type= { 
+        zero: number;
+        one: number;
+        add:binary_op; 
+        sub:binary_op; 
+        mul:binary_op; 
+        div:binary_op; 
+    }; 
+    calc : calc = {
+        add:binary_op=(n: number, m:number) => m + n; 
+        sub:binary_op=(n: number, m:number) => m - n; 
+        mul:binary_op=(n: number, m:number) => m * n; 
+        div:binary_op=(n: number, m:number) => m / n;
+    };
+} end calculator 
+```
 * in a separate file called operators.oxalc :
 ```fs
 let operators := 
@@ -39,10 +59,10 @@ end operators
 * in our main file :
 ```fs
 let program := 
-    include [constants, operators] for
+    include [constants, operators, calculator] for
     let value1 := num |> f where num := zero 
                            and f := incr in 
-    let value2 := apply((n:number) => n + 2, 0) in
+    let value2 := apply((n:number) => (calc . add)(n, 2), 0) in
     ?(value1 <> value2)
 end program 
 ```
