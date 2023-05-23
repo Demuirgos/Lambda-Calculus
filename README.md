@@ -28,8 +28,6 @@ end constants
 let calculator := {
     binary_op :type= number->number->number; 
     calc :type= { 
-        zero: number;
-        one: number;
         add:binary_op; 
         sub:binary_op; 
         mul:binary_op; 
