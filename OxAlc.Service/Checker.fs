@@ -13,8 +13,17 @@ module Typechecker
 
     let addType name type_n ctx = {
         ctx with 
+            Symbols = Map.add name (Atom "type") ctx.Symbols
             Types = Map.add name type_n ctx.Types  
     }
+
+    let flattenResults results =
+        let rec loop flatResult results =
+            match results with 
+            | [] -> Ok (flatResult)
+            | Ok a :: t -> loop (a::flatResult) t
+            | (Error err as error) :: _  -> Error(err)
+        loop [] results
 
     let rec addRange l ctx: TypingContext = 
         match l with 
@@ -34,6 +43,10 @@ module Typechecker
                         match term_t, body with 
                         | Atom "type", Value(TypeDefinition(type_def)) ->
                             addType name type_def ctx
+                        | Atom "type", Binary(Identifier(lhs), op, Identifier(rhs)) ->
+                            match op with 
+                            | And -> addType name (Intersection [Atom lhs; Atom rhs]) ctx
+                            | Or  -> addType name (Union        [Atom lhs; Atom rhs]) ctx
                         | _ -> 
                             addSymbol name (if suggested_type = Atom String.Empty
                                 then term_t 
@@ -43,6 +56,44 @@ module Typechecker
                 TypeOf cont (addSymbol name term_t ctx)  
             | _, Ok(term_t) -> Error (sprintf "Type mismatch in bind : expected type %s but given type %s" (suggested_type.ToString()) (term_t.ToString())), ctx
             | _, error -> error, ctx
+        | Match(_identifier, patterns) -> 
+            let (arg_type_r, ctx) = TypeOf _identifier ctx
+            let pats_type_r =  
+                patterns 
+                |> List.map (fun pat -> fst <| TypeOf pat ctx)
+                |> flattenResults
+
+            let rec return_type pats_types type_i type_r=
+                match pats_types, type_i, type_r with 
+                | [], Some itype_defs, Some rtype_def -> (Some itype_defs), (Ok rtype_def)
+                | Exponent(in_type, ret_type)::r, None, None -> return_type r (Some [in_type]) (Some ret_type)
+                | Exponent(in_type, ret_type)::r, Some t_i, Some t_r when t_r = ret_type -> return_type r (Some (in_type::t_i)) type_r
+                | Exponent(_, ret_type)::r, Some t_i, Some t_r -> None, Error (sprintf "type mismatch expected: %A but found %A" t_r ret_type)
+            
+            match arg_type_r, pats_type_r with 
+            | Ok(Atom arg_type as arg_type_w), Ok(pats_types) -> 
+                match return_type pats_types None None with 
+                | Some types, Ok rtype when Map.containsKey arg_type ctx.Types -> 
+                    match Map.find arg_type ctx.Types with 
+                    | Union(possible_types) when List.forall (fun typ -> List.contains typ types) possible_types ->
+                        Ok rtype,  ctx
+                    | simple_type when simple_type = Atom "type" && List.contains arg_type_w types->
+                        Ok rtype,  ctx
+                    | simple_type when simple_type <> Atom "type" && List.contains simple_type types->
+                        Ok rtype,  ctx
+                    | _ -> Error (sprintf "type mismatch"), ctx
+
+                | _ -> Error (sprintf "type mismatch"), ctx
+
+            | Ok(arg_type), Ok(pats_type_) -> 
+                match return_type pats_type_ None None with 
+                | Some types, Ok rtype when List.contains arg_type types -> Ok rtype, ctx
+                | _ -> Error (sprintf "type mismatch"), ctx
+
+            | Error err1, Error err2 -> Error (sprintf "%s; %s" err1 err2), ctx
+            | Error err, _ -> Error err, ctx
+            | _ , Error err -> Error err, ctx
+            | _ -> Error "type mismatch", ctx
         | Branch(_cond, _then, _else) -> 
             let (condType, ctx) = TypeOf _cond ctx 
             let (thenType, ctx) = TypeOf _then ctx 
@@ -179,8 +230,13 @@ module Typechecker
                 | Eq  , Ok (Atom "number") , Ok(Atom "number") -> Ok (Atom "bool")
                 | Gt  , Ok (Atom "number") , Ok(Atom "number") -> Ok (Atom "bool")
                 | Lt  , Ok (Atom "number") , Ok(Atom "number") -> Ok (Atom "bool")
+                
                 | And , Ok (Atom "bool"  ) , Ok(Atom "bool"  ) -> Ok (Atom "bool")
+                | And , Ok (Atom "type"  ) , Ok(Atom "type"  ) -> Ok (Atom "type")
+                
                 | Or  , Ok (Atom "bool"  ) , Ok(Atom "bool"  ) -> Ok (Atom "bool")
+                | Or  , Ok (Atom "type"  ) , Ok(Atom "type"  ) -> Ok (Atom "type")
+
                 | Not , Ok (Atom "bool"  ) , Ok(Atom "bool"  ) -> Ok (Atom "bool")
                 | Xor , Ok (Atom "bool"  ) , Ok(Atom "bool"  ) -> Ok (Atom "bool")
                 | Cons, Ok (Atom _       ) , Ok(Atom "list"  ) -> Ok (Atom "list")

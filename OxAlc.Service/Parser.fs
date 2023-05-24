@@ -17,14 +17,15 @@ module OxalcParser
             Parser {
                 return! [
                     parseLibrary includeTypeAsValueParser
+                    parseMatch
                     parseBrancher 
                     parseInclude    
                     parseLet false
                     parseCompound
                     parseFunction
-                    parseBinary
                     parseOperation      
                     parseValue includeTypeAsValueParser
+                    parseBinary
                     parseUnary
                     parseIdentifier    
                 ] |> choice 
@@ -39,7 +40,7 @@ module OxalcParser
                         | None        -> Atom String.Empty
             and parseSum = 
                 Parser {
-                    let (pUnion, pColon) = (parseWord "|", parseWord ":")
+                    let pUnion = parseWord "|"
                     // let pUnit = parseUnit .>>. option (pColon >>. parseExp)
                     let parseRhs = 
                         pSpaces >>. pUnion >>. pSpaces >>. parseType
@@ -177,6 +178,13 @@ module OxalcParser
                     return! pOpr .>>. pArgs
                 } 
             (legacyParser) <?> "Applicative" |>> Application
+        and parseMatch = 
+            Parser {
+                let [|pMatch; pLine; pWith|] = [|"match"; "|"; "with"|] |> Array.map parseWord
+                let parseFirstLine   = pMatch >>. pSpaces >>. parseIdentifier .>> pSpaces .>> pWith .>> pSpaces
+                let parseTypePattern = pLine  >>. pSpaces >>. parseFunction  .>> pSpaces 
+                return! parseFirstLine .>>. (many 1 parseTypePattern) 
+            } <?> "Match" |>> Statement.Match
         and parseBinary  = 
             Parser {
                 let operand =   (betweenC ('(', ')') parseBinary)   

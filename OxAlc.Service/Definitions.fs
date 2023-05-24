@@ -32,10 +32,15 @@ module Typedefinitions
             Symbols: Map<string, Type>
             Types : Map<string, Type>
         }
-        with static member Empty = {
-            Symbols = Map.empty
-            Types = Map.empty
-        }
+        with static member PrimitivesMap = 
+            Map.add "word" (Atom "type") 
+            (Map.add "bool" (Atom "type") 
+            (Map.add "number" (Atom "type") 
+            (Map.add "type" (Atom "type") Map.empty))) 
+            static member Empty = {
+                Symbols = TypingContext.PrimitivesMap
+                Types = TypingContext.PrimitivesMap
+            }
     
     and Statement = 
         (* Primitive Constructs*)
@@ -48,6 +53,7 @@ module Typedefinitions
         | Unary             of Operation * Statement
         | Binary            of Statement * Operation * Statement
         | Branch            of Statement * Statement * Statement
+        | Match             of Statement * (Statement list) 
         | Compound          of Statement * ((Statement * Type) * Statement) list   
         | Context           of Statement list * Statement
     and Literal =
