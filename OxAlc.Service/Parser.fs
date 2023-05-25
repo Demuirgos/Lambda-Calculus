@@ -183,8 +183,11 @@ module OxalcParser
                 let [|pMatch; pLine; pWith|] = [|"match"; "|"; "with"|] |> Array.map parseWord
                 let parseFirstLine   = pMatch >>. pSpaces >>. parseIdentifier .>> pSpaces .>> pWith .>> pSpaces
                 let parseTypePattern = pLine  >>. pSpaces >>. parseFunction  .>> pSpaces 
-                return! parseFirstLine .>>. (many 1 parseTypePattern) 
-            } <?> "Match" |>> Statement.Match
+                let parseFallbackPat = 
+                    let [| pUnderscore; pArrow |] = [|"_"; "=>"|] |> Array.map parseWord
+                    pLine  >>. pSpaces >>. pUnderscore >>. pSpaces >>. pArrow  .>> pSpaces >>. (parseExpression false) .>> pSpaces
+                return! parseFirstLine .>>. (many 1 parseTypePattern) .>>. (option parseFallbackPat)
+            } <?> "Match" |>> fun ((a, b),c) -> Statement.Match(a, b, c)
         and parseBinary  = 
             Parser {
                 let operand =   (betweenC ('(', ')') parseBinary)   

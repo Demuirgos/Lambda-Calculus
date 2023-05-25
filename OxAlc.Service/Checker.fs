@@ -93,7 +93,7 @@ module Typechecker
                 TypeOf cont (addSymbol name term_t ctx)  
             | _, Ok(term_t) -> Error (sprintf "Type mismatch in bind : expected type %s but given type %s" (suggested_type.ToString()) (term_t.ToString())), ctx
             | _, error -> error, ctx
-        | Match(_identifier, patterns) -> 
+        | Match(_identifier, patterns, fallthrough) -> 
             let (arg_type_r, ctx) = actualTypeOf _identifier ctx
             let pats_type_r =  
                 patterns 
@@ -109,8 +109,8 @@ module Typechecker
             
             match arg_type_r, pats_type_r with 
             | Ok(Atom arg_type as arg_type_w), Ok(pats_types) -> 
-                match return_type pats_types None None with 
-                | Some types, Ok rtype when Map.containsKey arg_type ctx.Types -> 
+                match fallthrough, return_type pats_types None None with 
+                | None, (Some types, Ok rtype) when Map.containsKey arg_type ctx.Types -> 
                     match Map.find arg_type ctx.Types with 
                     | Union(possible_types) when List.forall (fun typ -> List.contains typ types) possible_types ->
                         Ok rtype,  ctx
@@ -119,19 +119,21 @@ module Typechecker
                     | simple_type when simple_type <> Atom "type" && List.contains simple_type types->
                         Ok rtype,  ctx
                     | _ -> Error (sprintf "type mismatch"), ctx
-
+                | None, (Some _, Ok rtype) -> 
+                    Ok rtype,  ctx
                 | _ -> Error (sprintf "type mismatch"), ctx
 
             | Ok(arg_type), Ok(pats_type_) -> 
-                match arg_type with 
-                | Union(arg_possible_types) -> 
+                match fallthrough, arg_type with 
+                | None, Union(arg_possible_types) -> 
                     match return_type pats_type_ None None with 
                     | Some types, Ok rtype when List.forall (fun arg_t -> List.contains arg_t types) arg_possible_types -> Ok rtype, ctx
                     | _ -> Error (sprintf "type mismatch"), ctx
-                | Atom single_type as arg_type-> 
+                | None, (Atom single_type as arg_type)-> 
                     match return_type pats_type_ None None with 
                     | Some types, Ok rtype when List.contains arg_type types -> Ok rtype, ctx
                     | _ -> Error (sprintf "type mismatch"), ctx
+                | _ -> snd <| (return_type pats_type_ None None), ctx 
 
             | Error err1, Error err2 -> Error (sprintf "%s; %s" err1 err2), ctx
             | Error err, _ -> Error err, ctx

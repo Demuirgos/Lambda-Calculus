@@ -53,8 +53,8 @@ module Typedefinitions
         | Unary             of Operation * Statement
         | Binary            of Statement * Operation * Statement
         | Branch            of Statement * Statement * Statement
-        | Match             of Statement * (Statement list) 
-        | Compound          of Statement * ((Statement * Type) * Statement) list   
+        | Match             of Statement * (Statement list)  * (Statement option)
+        | Compound          of Statement * ((Statement * Type) * Statement) list 
         | Context           of Statement list * Statement
     and Literal =
         | Bool of bool 
