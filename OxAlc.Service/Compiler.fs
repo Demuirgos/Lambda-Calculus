@@ -339,8 +339,8 @@ module OxalcCompiler
                     // lazy way cause lazy ~\_(*-*)_/~
                     let rec matchBody  = 
                         function
-                        | [(pat, Ok(typeOfHead)); (fallback, _)] -> 
-                            sprintf "((\"%s\" === %s.type) ? (%s.value(%s)) : (%s.value(%s)))" (typeOfHead.ToString()) (id)  (emitJavascript ctx pat) (id) (emitJavascript ctx fallback) (id)
+                        | [(pat, Ok(typeOfHead))] -> 
+                            sprintf "((\"%s\" === %s.type) ? (%s.value(%s)) :  (function(){throw \"unhandled case was encountered in match\"}()))" (typeOfHead.ToString()) (id)  (emitJavascript ctx pat) (id)
                         | (pat, Ok(typeOfHead))::t -> 
                             sprintf "((\"%s\" === %s.type) ? (%s.value(%s)) : (%s))" (typeOfHead.ToString()) (id) (emitJavascript ctx pat) (id) (matchBody t) 
                     matchBody (pats |> List.map (fun pat -> pat, (getInputType << fst) <| TypeOf pat ctx.Value))
