@@ -17,19 +17,27 @@ module Typechecker
             Types = Map.add name type_n ctx.Types  
     }
 
-    let rec flattenIfUnionType type_def  =
-        let isUnion t = match t with | Union _ -> true | _ -> false
-        // lazy way Todo : improve algorithm or use a better one
-        let rec loop ts =
-            if not (List.forall (not << isUnion) ts) then 
-                List.concat <| List.map (fun type_name -> match type_name with 
-                    | Union(ts) -> ts
-                    | _ -> [type_name]
-                ) ts 
-            else ts
-        match type_def with 
-        | Union(ts) -> Union(loop ts)
-        | _ -> type_def 
+    let cleanUnionType = 
+        let rec flattenIfUnionType type_def  =
+            let isUnion t = match t with | Union _ -> true | _ -> false
+            // lazy way Todo : improve algorithm or use a better one
+            let rec loop ts =
+                if not (List.forall (not << isUnion) ts) then 
+                    List.concat <| List.map (fun type_name -> match type_name with 
+                        | Union(ts) -> ts
+                        | _ -> [type_name]
+                    ) ts 
+                else ts
+            match type_def with 
+            | Union(ts) -> Union(loop ts)
+            | _ -> type_def 
+        let collapseUnion type_def = 
+            match type_def with 
+            | Union(h::ts as types) when 1 = (List.length <| List.distinct types)-> h
+            | Union(ts) -> Union(List.distinct ts)
+            | _ -> type_def 
+        collapseUnion << flattenIfUnionType
+
 
     let flattenResults results =
         let rec loop flatResult results =
@@ -79,11 +87,11 @@ module Typechecker
                     let ctx = 
                         match term_t, body with 
                         | Atom "type", Value(TypeDefinition(type_def)) ->
-                            addType name (flattenIfUnionType type_def) ctx
+                            addType name (cleanUnionType type_def) ctx
                         | Atom "type", Binary(Identifier(lhs), op, Identifier(rhs)) ->
                             match op with 
                             | And -> addType name (Intersection [Atom lhs; Atom rhs]) ctx
-                            | Or  -> addType name (flattenIfUnionType <| Union [Atom lhs; Atom rhs]) ctx
+                            | Or  -> addType name (cleanUnionType <| Union [Atom lhs; Atom rhs]) ctx
                         | _ -> 
                             addSymbol name (if suggested_type = Atom String.Empty
                                 then term_t 
@@ -100,40 +108,43 @@ module Typechecker
                 |> List.map (fun pat -> fst <| TypeOf pat ctx)
                 |> flattenResults
 
-            let rec return_type pats_types type_i type_r=
+            let rec match_expression_sig pats_types type_i type_r=
                 match pats_types, type_i, type_r with 
-                | [], Some itype_defs, Some rtype_def -> (Some itype_defs), (Ok rtype_def)
-                | Exponent(in_type, ret_type)::r, None, None -> return_type r (Some [in_type]) (Some ret_type)
-                | Exponent(in_type, ret_type)::r, Some t_i, Some t_r when t_r = ret_type -> return_type r (Some (in_type::t_i)) type_r
-                | Exponent(_, ret_type)::r, Some t_i, Some t_r -> None, Error (sprintf "type mismatch expected: %A but found %A" t_r ret_type)
+                | [], Some itype_defs, Some rtype_def -> (Some itype_defs), (Some rtype_def)
+                | Exponent(in_type, ret_type)::r, None, None -> match_expression_sig r (Some [in_type]) (Some [ret_type])
+                | Exponent(in_type, ret_type)::r, Some t_i, Some t_r -> match_expression_sig r (Some (in_type::t_i)) (Some (ret_type::t_r))
             
             match arg_type_r, pats_type_r with 
             | Ok(Atom arg_type as arg_type_w), Ok(pats_types) -> 
-                match fallthrough, return_type pats_types None None with 
-                | None, (Some types, Ok rtype) when Map.containsKey arg_type ctx.Types -> 
+                match fallthrough, match_expression_sig pats_types None None with 
+                | None, (Some types, Some rtypes) when Map.containsKey arg_type ctx.Types -> 
                     match Map.find arg_type ctx.Types with 
                     | Union(possible_types) when List.forall (fun typ -> List.contains typ types) possible_types ->
-                        Ok rtype,  ctx
+                        Ok (Union rtypes), ctx
                     | simple_type when simple_type = Atom "type" && List.contains arg_type_w types->
-                        Ok rtype,  ctx
+                        Ok (Union rtypes), ctx
                     | simple_type when simple_type <> Atom "type" && List.contains simple_type types->
-                        Ok rtype,  ctx
+                        Ok (Union rtypes), ctx
                     | _ -> Error (sprintf "type mismatch"), ctx
-                | None, (Some _, Ok rtype) -> 
-                    Ok rtype,  ctx
+                | None, (Some _, Some rtypes) -> 
+                    Ok (Union rtypes), ctx
                 | _ -> Error (sprintf "type mismatch"), ctx
 
             | Ok(arg_type), Ok(pats_type_) -> 
                 match fallthrough, arg_type with 
                 | None, Union(arg_possible_types) -> 
-                    match return_type pats_type_ None None with 
-                    | Some types, Ok rtype when List.forall (fun arg_t -> List.contains arg_t types) arg_possible_types -> Ok rtype, ctx
-                    | _ -> Error (sprintf "type mismatch"), ctx
+                    match match_expression_sig pats_type_ None None with 
+                    | Some types, Some rtypes when List.forall (fun arg_t -> List.contains arg_t types) arg_possible_types -> Ok (Union rtypes), ctx
+                    | _ -> Error (sprintf "type handled by match dont match type provided, available handles:%A, got: %A" pats_type_ arg_possible_types ), ctx
                 | None, (Atom single_type as arg_type)-> 
-                    match return_type pats_type_ None None with 
-                    | Some types, Ok rtype when List.contains arg_type types -> Ok rtype, ctx
-                    | _ -> Error (sprintf "type mismatch"), ctx
-                | _ -> snd <| (return_type pats_type_ None None), ctx 
+                    match match_expression_sig pats_type_ None None with 
+                    | Some types, Some rtypes when List.contains arg_type types -> Ok (Union rtypes), ctx
+                    | _ -> Error (sprintf "type handled by match dont match type provided, available handles:%A, got: %A" pats_type_ single_type ), ctx
+                | Some expr, _ -> 
+                    let (fallback_t, _) = TypeOf expr ctx
+                    match fallback_t with 
+                    | Ok ftype_r -> Ok (cleanUnionType <| Union (ftype_r::(snd <| (match_expression_sig pats_type_ None None)).Value)), ctx 
+                    | error -> error, ctx
 
             | Error err1, Error err2 -> Error (sprintf "%s; %s" err1 err2), ctx
             | Error err, _ -> Error err, ctx
