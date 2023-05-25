@@ -64,7 +64,22 @@ let program :=
     ?(value1 <> value2)
 end program 
 ```
+* in a separate project :
+```fs
+let program := 
+    // showcase match / unions syntax
+    let primitive:= word | number | bool  in  
+    let value :primitive= 23 in 
+    let type_to_idx := 
+        (arg:primitive) => match arg with 
+                           | (w:word) => 0 
+                           | (n:number) => 1 
+                           | (b:bool) => 2 
+    in type_to_idx(value)
+end program 
+```
 this program yields the following result : 
+* program 1 : 
 ```fs
 (*when using Lambdas as compilation target*) 
 val it : bool = λ_a.λ_b._a
@@ -72,4 +87,8 @@ val it : bool = λ_a.λ_b._a
 ```js
 /*when using Javascript as compilation target*/ 
 var it = ((program) => program)(((cond) => ((incr) => ((decr) => ((check) => ((apply) => ((addadd) => ((qstqst) => ((eqleql) => ((grtlet) => ((qst) => ((ordlet) => ((zero) => ((one) => ((bool_t) => ((bool_f) => ((value1) => ((value2) => qst(grtlet(value1, value2)))(apply((n) => n + 2)(0)))(((num) => ((f) => ordlet(num, f))(incr))(zero)))(false))(true))(1))(0))((m) => (f) => f(m)))((n) => ((thenb, elseb) => (n == 0) ? thenb() : elseb())(() => false, () => true)))((n) => (m) => qstqst(n == m, 0)(1)))((n) => (m) => qstqst(n == m, 1)(0)))((b) => (n) => (m) => cond(b)(n)(m)))((n) => incr(n)))((f) => (n) => f(n)))((pred) => (n) => cond(pred(n))(1)(0)))((n) => n - 1))((n) => n + 1))((b) => (n) => (m) => ((thenb, elseb) => (b) ? thenb() : elseb())(() => n, () => m))) // true
+```
+* program 2 :
+```js
+var it = ((value) => ((type_to_idx) => (type_to_idx).value (value))(({ value:(arg) => (("word" === arg.type) ? (({ value:(w) => ({ value:0, type:"number" }), type:"word -> number" }).value(arg)) : ((("number" === arg.type) ? (({ value:(n) => ({ value:1, type:"number" }), type:"number -> number" }).value(arg)) : (({ value:(b) => ({ value:2, type:"number" }), type:"bool -> number" }).value(arg))))), type:"primitive -> number" })))(({ value:23, type:"number" }))
 ```
