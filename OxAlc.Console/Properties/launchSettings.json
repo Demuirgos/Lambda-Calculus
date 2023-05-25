@@ -2,7 +2,7 @@
   "profiles": {
     "OxAlc.Console": {
       "commandName": "Project",
-      "commandLineArgs": "--mode \"C:\\Users\\Ayman\\source\\repos\\Lambda-Calculus\\OxAlc.Console\\bin\\Debug\\net6.0\\programs1.oxalc\" --back JS"
+      "commandLineArgs": "--mode Terminal --back JS"
     }
   }
 }

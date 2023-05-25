@@ -26,6 +26,16 @@ module OxalcCompiler
             | _ -> failwith "Expression cannot be curried"
         let parseExp arg = (fromStr arg, parseExpr) ||> run 
         let Result = parseExp input
+
+        let getTypeOf name ctx = 
+            let symbolType = Map.find name ctx.Symbols
+            match symbolType with 
+            | Atom id when Map.containsKey id ctx.Types
+                ->  let typeOfType = Map.find id ctx.Types 
+                    if typeOfType = Atom "type" then Atom id else typeOfType
+            |_ -> symbolType
+
+
         printfn "%A" Result
 
         let rec injectFields fields p = 
@@ -206,9 +216,10 @@ module OxalcCompiler
                             | (label, msg, _)::errs -> 
                                 sprintf "%s: %s \n%s" label msg (msgAcc errs)
                         failwith (msgAcc msgs)
-                | Bind(name,_,  expr, value) ->
-                    match expr with 
-                    | Value(TypeDefinition(type_instance)) -> emitJavascript ctx value
+                | Bind(Identifier(id) as name,_,  expr, value) ->
+                    match expr, ctx with 
+                    | Value(TypeDefinition(type_instance)), _ -> emitJavascript ctx value
+                    | Binary _, Some ctx_inner when (Map.find id ctx_inner.Symbols) = Atom "type" -> emitJavascript ctx value
                     | _ -> 
                         if name = value then 
                             sprintf "%s" (emitJavascript ctx expr)
@@ -223,7 +234,9 @@ module OxalcCompiler
                 | Function _ as f->
                     match curry f with
                     | Function([(arg, _)], body) -> 
-                        sprintf "(%s) => %s" (emitJavascript ctx arg) (emitJavascript ctx body) 
+                        let (ftype, _) = TypeOf f ctx.Value
+                        match ftype with 
+                        | Ok ftype_r -> sprintf "({ value:(%s) => %s, type:\"%s\" })" (emitJavascript ctx arg) (emitJavascript ctx body) (ftype_r.ToString()) 
                 | Application(expr, args) as a ->
                     let isIdentity = 
                         match expr with 
@@ -236,7 +249,7 @@ module OxalcCompiler
                             params 
                             |> List.map (fun p -> sprintf "(%s)" (emitJavascript ctx p))
                             |> List.fold (fun acc p -> sprintf "%s %s" acc p) ""
-                        sprintf "%s%s" (emitJavascript ctx expr) (prepareArgs ctx args)
+                        sprintf "(%s).value%s" (emitJavascript ctx expr) (prepareArgs ctx args)
                 | Identifier(name) ->
                     let replaceSpecialCharacters c = 
                         match c with 
@@ -271,8 +284,9 @@ module OxalcCompiler
                         | _ -> failwith "Not Implemented" 
                     sprintf "%s%s" (opToString Op) (emitJavascript ctx rhs) 
                 | Branch(cond,tClause, fClause) as (t: Statement) -> 
-                    sprintf "((%s) ? (() => %s) : (() => %s))()" (emitJavascript ctx cond) (emitJavascript ctx tClause) (emitJavascript ctx fClause)
-                | Binary(lhs, Op, rhs) ->
+                    sprintf "((%s.value) ? (() => %s) : (() => %s))()" (emitJavascript ctx cond) (emitJavascript ctx tClause) (emitJavascript ctx fClause)
+                | Binary(lhs, Op, rhs) as binop->
+                    let (btype, _) = TypeOf binop ctx.Value
                     let isFieldLens = 
                         match rhs with 
                         | Identifier _ -> true
@@ -291,25 +305,45 @@ module OxalcCompiler
                         | And  -> "&&"
                         | Or   -> "||"
                         | _ -> String.Empty
-                    match Op with
-                    | Dot when isFieldLens -> sprintf "%s.%s" (emitJavascript ctx lhs) (emitJavascript ctx rhs)
-                    | Dot -> sprintf "%s[%s]" (emitJavascript ctx lhs) (emitJavascript ctx rhs)
-                    | Custom op -> sprintf "%s(%s)(%s)" (emitJavascript ctx (Identifier op)) (emitJavascript ctx lhs) (emitJavascript ctx rhs)
-                    | _ -> sprintf "%s %s %s" (emitJavascript ctx lhs) (opToString Op) (emitJavascript ctx rhs)
-                | Value(var) -> 
+                    match Op, btype with
+                    | Dot, _ when isFieldLens -> sprintf "%s.value.%s" (emitJavascript ctx lhs) (emitJavascript ctx rhs)
+                    | Dot, _  -> sprintf "%s.value[%s]" (emitJavascript ctx lhs) (emitJavascript ctx rhs)
+                    | Custom op, _ -> sprintf "%s.value(%s)(%s)" (emitJavascript ctx (Identifier op)) (emitJavascript ctx lhs) (emitJavascript ctx rhs)
+                    | _, Ok(btype_r)  -> sprintf "({ value:(%s.value %s %s.value), type: \"%s\"})" (emitJavascript ctx lhs) (opToString Op) (emitJavascript ctx rhs) (btype_r.ToString())
+                | Value(var) as variable-> 
+                    let (vtype, _) = TypeOf variable ctx.Value 
                     let varToString = match var with 
-                        | Variable(n) -> n.ToString()
-                        | Bool(b) -> b.ToString().ToLower()
-                        | String(str) -> sprintf "\"%s\"" (toString str)
+                        | Variable(n) -> 
+                            sprintf "({ value:%s, type:\"%s\" })" (n.ToString()) ("number")
+                        | Bool(b) -> 
+                            sprintf "({ value:%s, type:\"%s\" })" (b.ToString().ToLower()) ("bool")
+                        | String(str) -> 
+                            sprintf "({ value:%s, type:\"%s\" })" (sprintf "\"%s\"" (toString str)) ("word")
                         | Tuple(values) | List(values) -> 
-                            sprintf "[%s]" (String.concat "," (List.map (emitJavascript ctx) values))
+                            let value = sprintf "[%s]" (String.concat "," (List.map (emitJavascript ctx) values))
+                            match vtype with 
+                            | Ok vtype_r -> sprintf "({ value:%s, type:\"%s\" })" (value) (vtype_r.ToString())
                         | Record(fields) -> 
                             let rec fieldsToString fields = 
                                 match fields with 
                                 | [] -> System.String.Empty
                                 | ((name, _, value)::t) -> sprintf "\t%s: %s,\n%s" (emitJavascript ctx name) (emitJavascript ctx value) (fieldsToString t)
-                            sprintf "{\n%s}" (fieldsToString fields)
+                            let value = sprintf "{\n%s}" (fieldsToString fields)
+                            match vtype with 
+                            | Ok vtype_r -> sprintf "({ value:%s, type:\"%s\" })" (value) (vtype_r.ToString())
                     sprintf "%s" varToString
+                | Match(Identifier(id) as argument, pats) -> 
+                    let getInputType t = 
+                        match t with 
+                        | Ok(Exponent(input_t, _)) -> Ok input_t
+                    // lazy way cause lazy ~\_(*-*)_/~
+                    let rec matchBody  = 
+                        function
+                        | [(pat, Ok(typeOfHead))] -> 
+                            sprintf "((\"%s\" === %s.type) ? (%s.value(%s)) :  (function(){throw \"unhandled case was encountered in match\"}()))" (typeOfHead.ToString()) (id)  (emitJavascript ctx pat) (id)
+                        | (pat, Ok(typeOfHead))::t -> 
+                            sprintf "((\"%s\" === %s.type) ? (%s.value(%s)) : (%s))" (typeOfHead.ToString()) (id) (emitJavascript ctx pat) (id) (matchBody t) 
+                    matchBody (pats |> List.map (fun pat -> pat, (getInputType << fst) <| TypeOf pat ctx.Value))
                 | _  -> failwith "Not Implemented or Not Compilable"
             Ok (JSR(emitJavascript None program), ``initial State``)
         | target, Ok _ -> Error("Backend not supported", sprintf "%A is not supported" target, None)
