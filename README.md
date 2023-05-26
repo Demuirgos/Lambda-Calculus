@@ -1,6 +1,7 @@
-# Lambda-Calculus (WIP)
-A simple Programming Language Compiler to Lambda-Calculus, with a Lambda-Runtime 
-Oxalc Example :
+# OxAlc :: Lambda-Calculus (WIP)
+A simple Programming Language Compiler to Lambda-Calculus and Javascript, with a Lambda-Runtime
+
+## Oxalc Example :
 
  * in a separate file called functions.oxalc :
 ```fs
