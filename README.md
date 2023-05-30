@@ -1,5 +1,6 @@
 # OxAlc :: Lambda-Calculus (WIP)
 A simple Programming Language Compiler to Lambda-Calculus and Javascript, with a Lambda-Runtime
+NOTE(Lambda target is not yet up-to-date, currently exploring adding STLC)
 
 ## Oxalc Example :
 
@@ -80,7 +81,7 @@ let program :=
 end program 
 ```
 this program yields the following result : 
-* program 1 : 
+* program 1: 
 ```fs
 (*when using Lambdas as compilation target*) 
 val it : bool = λ_a.λ_b._a
