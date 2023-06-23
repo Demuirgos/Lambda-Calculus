@@ -68,16 +68,18 @@ end program
 ```
 * in a separate project :
 ```fs
+// match expression flattens Unions to one flat Union of Products and Prims
 let program := 
-    // showcase match / unions syntax
-    let primitive:= word | number | bool  in  
-    let value :primitive= 23 in 
-    let type_to_idx := 
-        (arg:primitive) => match arg with 
-                           | (w:word) => 0 
-                           | (n:number) => 1 
-                           | (b:bool) => 2 
-    in type_to_idx(value)
+	let integral:= number | bool  in  
+	let primitive:= word | integral  
+	in  let value :primitive= 23 
+	in let type_to_idx := 
+		(arg:primitive) => 
+			match arg with 
+			| (w:word) => 0 
+			| (n:number) => 1 
+			| (b:bool) => 2 
+	in type_to_idx(value) 
 end program 
 ```
 this program yields the following result : 
