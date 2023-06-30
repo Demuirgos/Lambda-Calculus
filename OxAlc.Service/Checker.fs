@@ -17,27 +17,59 @@ module Typechecker
             Types = Map.add name type_n ctx.Types  
     }
 
-    let cleanUnionType = 
-        let rec flattenIfUnionType type_def  =
-            let isUnion t = match t with | Union _ -> true | _ -> false
-            // lazy way Todo : improve algorithm or use a better one
-            let rec loop ts =
-                if not (List.forall (not << isUnion) ts) then 
-                    List.concat <| List.map (fun type_name -> match type_name with 
-                        | Union(ts) -> ts
-                        | _ -> [type_name]
-                    ) ts 
-                else ts
-            match type_def with 
-            | Union(ts) -> Union(loop ts)
-            | _ -> type_def 
-        let collapseUnion type_def = 
-            match type_def with 
-            | Union(h::ts as types) when 1 = (List.length <| List.distinct types)-> h
-            | Union(ts) -> Union(List.distinct ts)
-            | _ -> type_def 
-        collapseUnion << flattenIfUnionType
+    let rec actualTypeOf type_name ctx = 
+        match type_name with
+        | Atom iden -> 
+            match Map.tryFind iden ctx.Types with 
+            | Some(type_def) when type_def <> Atom "type"-> 
+                actualTypeOf type_def ctx
+            | Some(type_def) -> 
+                type_def
+            | None -> type_name
+        | _ -> type_name
+    
+    let rec isTypeMatch type_t type_v (ctx:TypingContext) = 
+        let rec checkTypeMatch type_t type_v ctx= 
+            match type_t with 
+            | _ when type_t = type_v -> true
+            | Union(types) ->
+                0 < (List.length <| List.where (fun t -> checkTypeMatch t type_v ctx) types)
+            | Atom(identifier) when identifier <> "type" ->
+                match Map.tryFind identifier ctx.Types with 
+                | None -> false
+                | Some(type_def) -> checkTypeMatch type_def type_v ctx
+            | _ -> false
+        checkTypeMatch type_t (actualTypeOf type_v ctx) ctx
 
+
+
+    let rec flattenIfUnionType type_def includeLiterals ctx =
+        let rec isUnion t = 
+            match t with 
+            | Union _ -> true, t
+            | Atom name as lit 
+                when name <> "type" 
+                    && includeLiterals 
+                -> 
+                    let actualTypeRef = actualTypeOf lit ctx
+                    if actualTypeRef = lit then 
+                        false, lit 
+                    else isUnion actualTypeRef
+            | _ -> false, t
+        // lazy way Todo : improve algorithm or use a better one
+        let rec loop ts =
+            if not (List.forall (not << fst << isUnion) ts) then 
+                loop (List.concat <| List.map (fun type_name -> match isUnion type_name with 
+                    | _, Union(ts) -> ts
+                    | _ -> [type_name]
+                ) ts)
+            else ts
+        match type_def with 
+        | Union(ts) -> Union(loop ts)
+        | Atom _ -> 
+            let (isUnion, actualType) = isUnion type_def 
+            if isUnion then flattenIfUnionType actualType includeLiterals ctx 
+            else type_def
 
     let flattenResults results =
         let rec loop flatResult results =
@@ -69,36 +101,23 @@ module Typechecker
         | Bind(Identifier(name), suggested_type, body, cont) -> 
             let (bodyType, ctx) = TypeOf body ctx  
             match suggested_type, bodyType with
-            | Atom(type_suggestion) , Ok(term_t) 
-                when Map.containsKey type_suggestion ctx.Types ->
-                    match Map.find type_suggestion ctx.Types with 
-                    | Union(types) as dealiasedType when List.contains term_t types -> 
-                        let ctx =  addSymbol name (if suggested_type = Atom String.Empty
-                            then term_t 
-                            else dealiasedType)  ctx
-                        TypeOf cont ctx 
-                    | _ -> 
-                        let ctx =  addSymbol name (if suggested_type = Atom String.Empty
-                            then term_t 
-                            else suggested_type)  ctx
-                        TypeOf cont ctx 
-            | _ as desiredTyper, Ok(term_t) 
-                when term_t = desiredTyper || desiredTyper = Atom String.Empty ->
+            | _ , Ok(term_t) 
+                when isTypeMatch suggested_type term_t ctx || suggested_type = Atom String.Empty ->
                     let ctx = 
                         match term_t, body with 
                         | Atom "type", Value(TypeDefinition(type_def)) ->
-                            addType name (cleanUnionType type_def) ctx
+                            addType name (flattenIfUnionType type_def false ctx) ctx
                         | Atom "type", Binary(Identifier(lhs), op, Identifier(rhs)) ->
                             match op with 
                             | And -> addType name (Intersection [Atom lhs; Atom rhs]) ctx
-                            | Or  -> addType name (cleanUnionType <| Union [Atom lhs; Atom rhs]) ctx
+                            | Or  -> addType name (flattenIfUnionType (Union [Atom lhs; Atom rhs]) false ctx) ctx
                         | _ -> 
                             addSymbol name (if suggested_type = Atom String.Empty
                                 then term_t 
                                 else suggested_type)  ctx
                     TypeOf cont ctx 
             | Atom(identifier), Ok(term_t) when Map.containsKey identifier ctx.Types && term_t = (Map.find identifier ctx.Types) ->
-                TypeOf cont (addSymbol name term_t ctx)  
+                TypeOf cont (addSymbol name suggested_type ctx)  
             | _, Ok(term_t) -> Error (sprintf "Type mismatch in bind : expected type %s but given type %s" (suggested_type.ToString()) (term_t.ToString())), ctx
             | _, error -> error, ctx
         | Match(_identifier, patterns, fallthrough) -> 
@@ -129,22 +148,16 @@ module Typechecker
                 | None, (Some _, Some rtypes) -> 
                     Ok (Union rtypes), ctx
                 | _ -> Error (sprintf "type mismatch"), ctx
-
             | Ok(arg_type), Ok(pats_type_) -> 
-                match fallthrough, arg_type with 
-                | None, Union(arg_possible_types) -> 
-                    match match_expression_sig pats_type_ None None with 
-                    | Some types, Some rtypes when List.forall (fun arg_t -> List.contains arg_t types) arg_possible_types -> Ok (Union rtypes), ctx
-                    | _ -> Error (sprintf "type handled by match dont match type provided, available handles:%A, got: %A" pats_type_ arg_possible_types ), ctx
-                | None, (Atom single_type as arg_type)-> 
-                    match match_expression_sig pats_type_ None None with 
-                    | Some types, Some rtypes when List.contains arg_type types -> Ok (Union rtypes), ctx
-                    | _ -> Error (sprintf "type handled by match dont match type provided, available handles:%A, got: %A" pats_type_ single_type ), ctx
-                | Some expr, _ -> 
-                    let (fallback_t, _) = TypeOf expr ctx
-                    match fallback_t with 
-                    | Ok ftype_r -> Ok (cleanUnionType <| Union (ftype_r::(snd <| (match_expression_sig pats_type_ None None)).Value)), ctx 
-                    | error -> error, ctx
+                match flattenIfUnionType arg_type true ctx with 
+                | Union(arg_possible_types) -> 
+                    match return_type pats_type_ None None with 
+                    | Some types, Ok rtype when List.forall (fun arg_t -> List.contains arg_t types) arg_possible_types -> Ok rtype, ctx
+                    | _ -> Error (sprintf "type mismatch"), ctx
+                | Atom single_type as arg_type-> 
+                    match return_type pats_type_ None None with 
+                    | Some types, Ok rtype when List.contains arg_type types -> Ok rtype, ctx
+                    | _ -> Error (sprintf "type mismatch"), ctx
 
             | Error err1, Error err2 -> Error (sprintf "%s; %s" err1 err2), ctx
             | Error err, _ -> Error err, ctx
@@ -156,6 +169,7 @@ module Typechecker
             let (elseType, ctx) = TypeOf _else ctx  
             match condType, thenType, elseType with
             | Ok(Atom "bool"), Ok(then_t), Ok(else_t) when then_t = else_t -> Ok(then_t), ctx
+            | Ok(Atom "bool"), Ok(then_t), Ok(else_t) when then_t <> else_t -> Ok(Union [then_t; else_t]), ctx
             | Ok(Atom "bool"), Ok(then_t), Ok(else_t) -> 
                 Error (sprintf "Type mismatch in if-expr : expression branches types don't match %s and %s" (then_t.ToString()) (else_t.ToString())), ctx
             | Ok cond_t, _, _ -> Error (sprintf "Type mismatch in if-expr : Condition Type must be %s but given %s" (Atom("bool").ToString()) (cond_t.ToString())), ctx

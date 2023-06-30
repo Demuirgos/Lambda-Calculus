@@ -1,0 +1,41 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.6.33723.286
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "OxAlc.Console", "OxAlc.Console\OxAlc.Console.fsproj", "{BA1E1046-F991-46DC-A243-5A2C0F7C7242}"
+EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Lambdas", "OxAlc.Service\Lambdas.fsproj", "{6769F46E-4D1F-4D91-A8D7-FD882327062E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x86 = Debug|x86
+		Release|Any CPU = Release|Any CPU
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{BA1E1046-F991-46DC-A243-5A2C0F7C7242}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BA1E1046-F991-46DC-A243-5A2C0F7C7242}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BA1E1046-F991-46DC-A243-5A2C0F7C7242}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{BA1E1046-F991-46DC-A243-5A2C0F7C7242}.Debug|x86.Build.0 = Debug|Any CPU
+		{BA1E1046-F991-46DC-A243-5A2C0F7C7242}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BA1E1046-F991-46DC-A243-5A2C0F7C7242}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BA1E1046-F991-46DC-A243-5A2C0F7C7242}.Release|x86.ActiveCfg = Release|Any CPU
+		{BA1E1046-F991-46DC-A243-5A2C0F7C7242}.Release|x86.Build.0 = Release|Any CPU
+		{6769F46E-4D1F-4D91-A8D7-FD882327062E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6769F46E-4D1F-4D91-A8D7-FD882327062E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6769F46E-4D1F-4D91-A8D7-FD882327062E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{6769F46E-4D1F-4D91-A8D7-FD882327062E}.Debug|x86.Build.0 = Debug|Any CPU
+		{6769F46E-4D1F-4D91-A8D7-FD882327062E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6769F46E-4D1F-4D91-A8D7-FD882327062E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6769F46E-4D1F-4D91-A8D7-FD882327062E}.Release|x86.ActiveCfg = Release|Any CPU
+		{6769F46E-4D1F-4D91-A8D7-FD882327062E}.Release|x86.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {8C15C91E-AEAF-4F19-BB87-497ED6748AC2}
+	EndGlobalSection
+EndGlobal

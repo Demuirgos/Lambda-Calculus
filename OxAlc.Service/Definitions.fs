@@ -39,7 +39,7 @@ module Typedefinitions
             (Map.add "type" (Atom "type") Map.empty))) 
             static member Empty = {
                 Symbols = TypingContext.PrimitivesMap
-                Types = TypingContext.PrimitivesMap
+                Types = Map.empty
             }
     
     and Statement = 
