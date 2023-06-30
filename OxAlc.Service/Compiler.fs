@@ -332,15 +332,17 @@ module OxalcCompiler
                             match vtype with 
                             | Ok vtype_r -> sprintf "({ value:%s, type:\"%s\" })" (value) (vtype_r.ToString())
                     sprintf "%s" varToString
-                | Match(Identifier(id) as argument, pats) -> 
+                | Match(Identifier(id) as argument, pats, fallthrough) -> 
                     let getInputType t = 
                         match t with 
                         | Ok(Exponent(input_t, _)) -> Ok input_t
                     // lazy way cause lazy ~\_(*-*)_/~
                     let rec matchBody  = 
                         function
-                        | [(pat, Ok(typeOfHead))] -> 
-                            sprintf "((\"%s\" === %s.type) ? (%s.value(%s)) :  (function(){throw \"unhandled case was encountered in match\"}()))" (typeOfHead.ToString()) (id)  (emitJavascript ctx pat) (id)
+                        | [(pat, Ok(typeOfHead))] ->
+                            match fallthrough with 
+                            | Some statement ->  sprintf "((\"%s\" === %s.type) ? (%s.value(%s)) :  (%s))" (typeOfHead.ToString()) (id)  (emitJavascript ctx pat) (id) (emitJavascript ctx statement)
+                            | None ->  sprintf "((\"%s\" === %s.type) ? (%s.value(%s)) :  (function(){throw \"unhandled case was encountered in match\"}()))" (typeOfHead.ToString()) (id)  (emitJavascript ctx pat) (id)
                         | (pat, Ok(typeOfHead))::t -> 
                             sprintf "((\"%s\" === %s.type) ? (%s.value(%s)) : (%s))" (typeOfHead.ToString()) (id) (emitJavascript ctx pat) (id) (matchBody t) 
                     matchBody (pats |> List.map (fun pat -> pat, (getInputType << fst) <| TypeOf pat ctx.Value))

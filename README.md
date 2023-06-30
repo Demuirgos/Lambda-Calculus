@@ -1,6 +1,8 @@
-# Lambda-Calculus (WIP)
-A simple Programming Language Compiler to Lambda-Calculus, with a Lambda-Runtime 
-Oxalc Example :
+# OxAlc :: Lambda-Calculus (WIP)
+A simple Programming Language Compiler to Lambda-Calculus and Javascript, with a Lambda-Runtime
+NOTE(Lambda target is not yet up-to-date, currently exploring adding STLC)
+
+## Oxalc Example :
 
  * in a separate file called functions.oxalc :
 ```fs
@@ -23,6 +25,24 @@ let constants := {
     }
 end constants 
 ```
+* in a separate file called calculator.oxalc : 
+```fs
+let calculator := {
+    binary_op :type= number->number->number; 
+    calc :type= { 
+        add:binary_op; 
+        sub:binary_op; 
+        mul:binary_op; 
+        div:binary_op; 
+    }; 
+    calc : calc = {
+        add:binary_op=(n: number, m:number) => m + n; 
+        sub:binary_op=(n: number, m:number) => m - n; 
+        mul:binary_op=(n: number, m:number) => m * n; 
+        div:binary_op=(n: number, m:number) => m / n;
+    };
+} end calculator 
+```
 * in a separate file called operators.oxalc :
 ```fs
 let operators := 
@@ -39,14 +59,31 @@ end operators
 * in our main file :
 ```fs
 let program := 
-    include [constants, operators] for
+    include [constants, operators, calculator] for
     let value1 := num |> f where num := zero 
                            and f := incr in 
-    let value2 := apply((n:number) => n + 2, 0) in
+    let value2 := apply((n:number) => (calc . add)(n, 2), 0) in
     ?(value1 <> value2)
 end program 
 ```
+* in a separate project :
+```fs
+// match expression flattens Unions to one flat Union of Products and Prims
+let program := 
+	let integral:= number | bool  in  
+	let primitive:= word | integral  
+	in  let value :primitive= 23 
+	in let type_to_idx := 
+		(arg:primitive) => 
+			match arg with 
+			| (w:word) => 0 
+			| (n:number) => 1 
+			| (b:bool) => 2 
+	in type_to_idx(value) 
+end program 
+```
 this program yields the following result : 
+* program 1: 
 ```fs
 (*when using Lambdas as compilation target*) 
 val it : bool = λ_a.λ_b._a
@@ -54,4 +91,8 @@ val it : bool = λ_a.λ_b._a
 ```js
 /*when using Javascript as compilation target*/ 
 var it = ((program) => program)(((cond) => ((incr) => ((decr) => ((check) => ((apply) => ((addadd) => ((qstqst) => ((eqleql) => ((grtlet) => ((qst) => ((ordlet) => ((zero) => ((one) => ((bool_t) => ((bool_f) => ((value1) => ((value2) => qst(grtlet(value1, value2)))(apply((n) => n + 2)(0)))(((num) => ((f) => ordlet(num, f))(incr))(zero)))(false))(true))(1))(0))((m) => (f) => f(m)))((n) => ((thenb, elseb) => (n == 0) ? thenb() : elseb())(() => false, () => true)))((n) => (m) => qstqst(n == m, 0)(1)))((n) => (m) => qstqst(n == m, 1)(0)))((b) => (n) => (m) => cond(b)(n)(m)))((n) => incr(n)))((f) => (n) => f(n)))((pred) => (n) => cond(pred(n))(1)(0)))((n) => n - 1))((n) => n + 1))((b) => (n) => (m) => ((thenb, elseb) => (b) ? thenb() : elseb())(() => n, () => m))) // true
+```
+* program 2 :
+```js
+var it = ((value) => ((type_to_idx) => (type_to_idx).value (value))(({ value:(arg) => (("word" === arg.type) ? (({ value:(w) => ({ value:0, type:"number" }), type:"word -> number" }).value(arg)) : ((("number" === arg.type) ? (({ value:(n) => ({ value:1, type:"number" }), type:"number -> number" }).value(arg)) : (({ value:(b) => ({ value:2, type:"number" }), type:"bool -> number" }).value(arg))))), type:"primitive -> number" })))(({ value:23, type:"number" }))
 ```

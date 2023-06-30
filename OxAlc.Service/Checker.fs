@@ -120,35 +120,34 @@ module Typechecker
                 TypeOf cont (addSymbol name suggested_type ctx)  
             | _, Ok(term_t) -> Error (sprintf "Type mismatch in bind : expected type %s but given type %s" (suggested_type.ToString()) (term_t.ToString())), ctx
             | _, error -> error, ctx
-        | Match(_identifier, patterns) -> 
+        | Match(_identifier, patterns, fallthrough) -> 
             let (arg_type_r, ctx) = actualTypeOf _identifier ctx
             let pats_type_r =  
                 patterns 
                 |> List.map (fun pat -> fst <| TypeOf pat ctx)
                 |> flattenResults
 
-            let rec return_type pats_types type_i type_r=
+            let rec match_expression_sig pats_types type_i type_r=
                 match pats_types, type_i, type_r with 
-                | [], Some itype_defs, Some rtype_def -> (Some itype_defs), (Ok rtype_def)
-                | Exponent(in_type, ret_type)::r, None, None -> return_type r (Some [in_type]) (Some ret_type)
-                | Exponent(in_type, ret_type)::r, Some t_i, Some t_r when t_r = ret_type -> return_type r (Some (in_type::t_i)) type_r
-                | Exponent(_, ret_type)::r, Some t_i, Some t_r -> None, Error (sprintf "type mismatch expected: %A but found %A" t_r ret_type)
+                | [], Some itype_defs, Some rtype_def -> (Some itype_defs), (Some rtype_def)
+                | Exponent(in_type, ret_type)::r, None, None -> match_expression_sig r (Some [in_type]) (Some [ret_type])
+                | Exponent(in_type, ret_type)::r, Some t_i, Some t_r -> match_expression_sig r (Some (in_type::t_i)) (Some (ret_type::t_r))
             
             match arg_type_r, pats_type_r with 
             | Ok(Atom arg_type as arg_type_w), Ok(pats_types) -> 
-                match return_type pats_types None None with 
-                | Some types, Ok rtype when Map.containsKey arg_type ctx.Types -> 
+                match fallthrough, match_expression_sig pats_types None None with 
+                | None, (Some types, Some rtypes) when Map.containsKey arg_type ctx.Types -> 
                     match Map.find arg_type ctx.Types with 
                     | Union(possible_types) when List.forall (fun typ -> List.contains typ types) possible_types ->
-                        Ok rtype,  ctx
+                        Ok (Union rtypes), ctx
                     | simple_type when simple_type = Atom "type" && List.contains arg_type_w types->
-                        Ok rtype,  ctx
+                        Ok (Union rtypes), ctx
                     | simple_type when simple_type <> Atom "type" && List.contains simple_type types->
-                        Ok rtype,  ctx
+                        Ok (Union rtypes), ctx
                     | _ -> Error (sprintf "type mismatch"), ctx
-
+                | None, (Some _, Some rtypes) -> 
+                    Ok (Union rtypes), ctx
                 | _ -> Error (sprintf "type mismatch"), ctx
-
             | Ok(arg_type), Ok(pats_type_) -> 
                 match flattenIfUnionType arg_type true ctx with 
                 | Union(arg_possible_types) -> 
