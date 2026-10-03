@@ -85,9 +85,9 @@ module Abstractor
                     choice [    
                         parseBrancher
                         parseLet false
-                        parseOperation      
                         parseFunction
                         parseBinary
+                        parseOperation
                         parseValue
                         parseUnary
                         parseIdentifier    
@@ -108,7 +108,7 @@ module Abstractor
         match Result with
         | Success (program,r) -> 
             let toSyntaxTree = parse     >> (function Success(code,_) -> code) >> 
-                               interpret >> (function Ok(program)     -> program)
+                               interpret 
             let rec emitLambda= function
                 | Bind(name, expr, value) ->
                     Applicative(Lambda(emitLambda name, emitLambda value), emitLambda expr)
@@ -141,12 +141,12 @@ module Abstractor
                     | Add -> Lambda(Atom "_g", Lambda(Atom "_v", Applicative(Applicative(emitLambda lhs, Atom "_g"), Applicative(Applicative(emitLambda rhs, Atom "_g"), Atom "_v"))))
                     | Mult-> Lambda(Atom "_g", Lambda(Atom "_v", Applicative(Applicative(emitLambda lhs, Applicative(emitLambda rhs, Atom "_g")), Atom "_v")))
                     | Exp -> Applicative(emitLambda rhs, emitLambda lhs)
-                    | And -> Applicative(Applicative(emitLambda rhs, emitLambda lhs), emitLambda (Value False))
-                    | Or  -> Applicative(Applicative(emitLambda rhs, emitLambda (Value False)), emitLambda lhs)
+                    | And -> Applicative(Applicative(emitLambda lhs, emitLambda rhs), emitLambda (Value False))
+                    | Or  -> Applicative(Applicative(emitLambda lhs, emitLambda (Value True)), emitLambda rhs)
                     | Subs-> Applicative(Applicative(emitLambda rhs, predec), emitLambda lhs)
                     | Lt  -> isZero (emitLambda (Binary(lhs, Subs, rhs))) | Gt  -> emitLambda (Binary(rhs, Lt, lhs))
                     | Eq  -> emitLambda (Binary(Binary(lhs, Lt, rhs), And, Binary(lhs, Gt, rhs)))
-                    | Xor -> Applicative(Applicative(emitLambda rhs, emitLambda (Unary(Not, lhs))), emitLambda lhs)
+                    | Xor -> Applicative(Applicative(emitLambda lhs, emitLambda (Unary(Not, rhs))), emitLambda rhs)
                  | Value(var) -> 
                     match var with 
                     | True -> Lambda(Atom "_a", Lambda(Atom "_b", Atom "_a"))
