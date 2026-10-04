@@ -312,14 +312,24 @@ module Typechecker
                 | Not , Ok (Atom "bool"  ) , Ok(Atom "bool"  ) -> Ok (Atom "bool")
                 | Xor , Ok (Atom "bool"  ) , Ok(Atom "bool"  ) -> Ok (Atom "bool")
                 | Cons, Ok (Atom _       ) , Ok(Atom "list"  ) -> Ok (Atom "list")
-                | Dot , Ok (Atom type_name) , _ -> 
-                    handle Dot (match Map.tryFind type_name ctx.Types with | Some(t) -> Ok(t) | _ -> Error("Missing type")) right_t
-                | Dot , Ok (Struct fields) , _ -> Ok (Map.find right fields)
-                | Dot , Ok (Intersection items) , _ -> 
-                    let item_index  = 
-                        match right with 
-                        | Value(Variable(index)) -> index 
-                    Ok (items[item_index])
+                | Dot , Ok (Atom type_name) , _ ->
+                    match Map.tryFind type_name ctx.Types with
+                    | Some resolvedType -> handle Dot (Ok resolvedType) (Error "unused")
+                    | None -> Error (sprintf "Unknown type '%s' in member access" type_name)
+                | Dot , Ok (Struct fields) , _ ->
+                    match right with
+                    | Identifier fieldName ->
+                        match Map.tryFind (Identifier fieldName) fields with
+                        | Some fieldType -> Ok fieldType
+                        | None -> Error (sprintf "Field '%s' not found in struct type" fieldName)
+                    | _ -> Error (sprintf "Invalid member access target '%s'" (right.ToString()))
+                | Dot , Ok (Intersection items) , _ ->
+                    match right with
+                    | Value (Variable index) when index >= 0 && index < List.length items ->
+                        Ok (List.item index items)
+                    | Value (Variable index) ->
+                        Error (sprintf "Intersection index %d out of range" index)
+                    | _ -> Error (sprintf "Invalid intersection index access '%s'" (right.ToString()))
                 | Custom symbol, Ok(loperand_t), Ok(roperand_t) -> 
                     if(ctx.Symbols.ContainsKey(symbol)) then 
                         let typeOfExpr = 
